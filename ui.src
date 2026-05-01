@@ -86,12 +86,12 @@ ui.confirm = function(msg, default = "")
     end while
 end function
 
-ui.select = function(title, options, addToHistory = false)
+ui.select = function(title, options, default = "0", addToHistory = false)
     keymap = {}
     for opt in options
         if opt.hasIndex("key") then keymap[opt.key] = opt
     end for
-    print(self.bold("\n" + title + ":"))
+    print(self.bold("\n" + title + "[" + default + "]" + ":"))
     ui.debug("menu for: " + options)
     if options == null or not options isa list or (options isa list and options.len == 0) then
         ui.error("error: no options to select from")
@@ -121,16 +121,25 @@ ui.select = function(title, options, addToHistory = false)
     print(self.color(" [0] ", "primary") + self.color(self.bold("cancel"), "accent"))
     
     while true
-        choice = self.ask("Выберите номер", "", addToHistory)
+        choice = ""
+        choice = self.ask("Выберите номер [" + default + "]:", "", addToHistory)
         ui.debug("choice = " + choice + " of type " + typeof(choice))
+        if choice == "" then 
+            ui.debug("used default (" + typeof(default) + " " + default + ") variant")
+            choice = default
+        end if
         if choice == "0" then
-            return {"text":"cancel", "value": null}
+            return {"text":"cancel", "value": null, "choice":choice}
         else if keymap.hasIndex(choice) then
-            return keymap[choice]
+            ret = keymap[choice]
+            ret["choice"] = choice
+            return ret
         else if not choice or choice.val < 1 or choice.val > options.len then
             self.error("Неверный выбор, попробуйте еще раз")
         else
-            return options[choice.val - 1]
+            ret = options[choice.val - 1]
+            ret["choice"] = choice
+            return ret
         end if
     end while
 end function

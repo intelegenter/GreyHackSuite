@@ -2,6 +2,8 @@ import_code("/home/intel/sources/acli.src")
 import_code("/home/intel/sources/ui.src")
 import_code("/home/intel/sources/exploit.src")
 import_code("/home/intel/sources/meta.src")
+import_code("/home/intel/sources/collector.src")
+import_code("/home/intel/sources/netutils.src")
 
 ex = null
 args = ArgParser.parse(params)
@@ -229,6 +231,7 @@ if vulns == null or vulns == [] then
 	exit()
 end if
 
+nextchoice = "1"
 while true
 	options = []
 	for m in vulns
@@ -252,26 +255,48 @@ while true
 		ui.saveLog(log_path, str)
 	end if
 
-	opt = ui.select("pick vulnerability", options, true)
+	opt = ui.select("pick vulnerability", options, nextchoice, true)
 	if opt == null then 
 		ui.error("error: menu returned null opt")
 		break
 	end if
 	if opt.value == null then break
+	choice = opt.choice
+	if choice == str(choice.val) then
+		nextchoice = str((choice.val + 1) % (options.len + 1))
+	end if
 	args = ui.ask("args")
 	result = ex.attack(opt.value.addr, opt.value.zone, args)
 	if result == null then
 		ui.warn("attack has null result")
+		//nextchoice = (nextchoice.val + 1) % options.len
 		user_input("press any key...", false, true)
 		continue
 	end if
 	if not Meta.isClass(result) then
 		ui.debug(result)
 		user_input("press any key...", false, true)
+	else if result.classID == "computer" then
+		ui.debug("computer, provide options")
+		compmenu = [{"text": "open", "value": "open", "key": "open"}, 
+					{"text": "collect", "value": "collect", "key": "collect"}]
+		subopt = ui.select("what do you want to do with computer?", compmenu, "1")
+		ui.debug("selected option: " + subopt.value)
+		if subopt == null then continue
+		if subopt.value == "open" then 
+			ui.debug("opening computer")
+			Meta.startMenu(result)
+		else if subopt.value == "collect" then
+			ui.debug("collecting computer")
+			collector = Collector.init(ex, opt.value.addr, opt.value.zone)
+			if collector == null then 
+				ui.error("can't initialize collector")
+				continue
+			end if
+			collector.scanRouter(get_router)
+			Meta.startMenu(collector)
+		end if
 	else
 		Meta.startMenu(result)
 	end if
 end while
-
-//table = ui.table(headers, data)
-//print(table)
