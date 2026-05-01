@@ -4,6 +4,7 @@ import_code("/home/intel/sources/exploit.src")
 import_code("/home/intel/sources/meta.src")
 import_code("/home/intel/sources/collector.src")
 import_code("/home/intel/sources/netutils.src")
+import_code("/home/intel/sources/listops.src")
 
 ex = null
 args = ArgParser.parse(params)
