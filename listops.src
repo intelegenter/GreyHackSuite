@@ -1,0 +1,9 @@
+//listops.src
+Listops = {}
+
+Listops.removeEntries = function(list, entry)
+    if list.len == 0 then return
+    for i in range(list.len - 1, 0)
+        if list[i] == entry then list.remove(i)
+    end for
+end function
