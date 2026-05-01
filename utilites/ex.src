@@ -27,6 +27,10 @@ parseCreds = function(credsStr)
 	return retval
 end function
 
+if args.has("-s") or args.has("--shell") then
+	exit(Meta.startMenu(get_shell))
+end if
+
 remoteMetaxploitStr = args.get("--remote-metaxploit", null)
 if remoteMetaxploitStr != null then
 	creds = parseCreds(remoteMetaxploitStr)
