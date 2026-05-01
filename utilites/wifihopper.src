@@ -1,0 +1,106 @@
+import_code("/home/intel/sources/ui.src")
+import_code("/home/intel/sources/acli.src")
+
+ui.setLogLevel("info")
+
+loadCreds = function(file)
+    if not file isa File then return null
+	ui.debug("file " + file.name() + " is opened")
+    content = file.get_content
+	ui.debug("it's content: " + content)
+    rows = content.split(char(10))
+	ui.debug("rows: " + rows)
+    result = []
+    for row in rows 
+		ui.debug("analyze row: " + row)
+        creds = {}
+        columns = row.split(" ")
+		ui.debug("found columns: " + columns)
+        if columns.len != 4 then continue
+        creds.interface = columns[0]
+        creds.bssid = columns[1]
+        creds.essid = columns[2]
+        creds.password = columns[3]
+		ui.debug("found entry: " + creds)
+        result.push(creds)
+    end for
+	ui.debug("loading result: " + result)
+    return result
+end function
+
+formSelectMenu = function(creds)
+    options = []
+    i = 0
+    while i < creds.len
+        cred = creds[i]
+        option = {}
+        option.text = cred.essid
+        option.value = i
+        options.push(option)
+        i = i + 1
+    end while
+    return options
+end function
+
+args = ArgParser.parse(params)
+comp = get_shell.host_computer
+filePath = args.get("-f", current_path + "/wifi.txt")
+file = comp.File(filePath)
+if file == null then
+    exit(ui.color("Can't find file " + filePath, "danger"))
+end if
+ui.debug("initiating creds loading") 
+creds = loadCreds(file)
+if creds == null or creds.len == 0 then exit(ui.color("no creds found in file " + filePath, "danger"))
+
+interval = args.get("-i", "60").val
+if interval == 0 then 
+    ui.warn("invalid interval, use default 60s")
+    interval = 60
+end if
+
+secondsElapsed = 0.0
+
+currentCredInd = 0
+while true
+    isPaused = false
+    currentCred = creds[currentCredInd]
+	currentCredInd = (currentCredInd + 1) % creds.len
+    result = comp.connect_wifi(currentCred.interface, currentCred.bssid, currentCred.essid, currentCred.password)
+    if result == null or not result isa number or result == false then 
+        ui.warn("can't connect to " + currentCred +" result: " + result)
+        continue
+	else 
+		ui.success("connected to " + currentCred.essid + " " + get_shell.host_computer.public_ip)
+		ui.info("press 'Enter' to hop immediately, 'Space' to start/pause hopping, 'p' to pick specific network")
+    end if
+	while secondsElapsed < interval
+		key = poll_input
+		if key == "Enter" then 
+			secondsElapsed = interval
+			ui.success("manual hop requested")
+			break
+        else if key == " " then
+            isPaused = not isPaused
+            if isPaused then 
+                ui.warn("hopping is paused, press 'Space' again to continue hopping")
+            else
+                ui.success("hopping continued")
+                break
+            end if
+        else if key == "p" then
+            options = formSelectMenu(creds)
+            option = ui.select("pick network", options)
+            if option.value == null then continue
+            currentCredInd = option.value
+			break
+		end if
+		wait(0.25)
+        if not isPaused then
+		    secondsElapsed = secondsElapsed + 0.25
+        end if
+	end while
+	secondsElapsed = 0
+end while
+
+

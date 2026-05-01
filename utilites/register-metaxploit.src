@@ -1,0 +1,4 @@
+metaxploit = include_lib("/lib/metaxploit.so")
+if not metaxploit then exit("there is no metaxploit.so in /lib folder")
+obj = get_custom_object
+obj.metaxploit = metaxploit

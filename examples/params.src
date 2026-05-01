@@ -1,0 +1,25 @@
+import_code("/home/intel/argparser.src")
+import_code("/home/intel/ui.src")
+
+// Инициализация
+args = ArgParser.parse(params)
+
+// Приветствие
+ui.line("=", 40)
+print(ui.color(ui.bold("  G R E Y - E X P L O I T  v1.0"), "accent"))
+ui.line("=", 40)
+
+// Логика
+target = args.get("-t")
+
+if not target then
+    ui.error("Цель не указана! Используйте -t [IP]")
+    ui.info("Пример: my_script -t 192.168.1.1")
+    exit()
+end if
+
+ui.success("Цель захвачена: " + target)
+
+if args.has("-v") then
+    ui.warn("Включен режим подробного логгирования...")
+end if

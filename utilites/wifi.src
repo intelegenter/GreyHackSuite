@@ -1,0 +1,86 @@
+import_code("/home/intel/sources/ui.src")
+import_code("/home/intel/sources/acli.src")
+
+checkAlredyHaveResult = function(bssid, essid)
+    file = comp.File(current_path + "/wifi.txt")
+    if file == null then return false
+    content = file.get_content
+    if content.indexOf([bssid, essid].join(" ")) != null then return true
+    return false
+end function
+
+saveResult = function(netdevice, bssid, essid, password)
+    ui.info([netdevice, bssid, essid, password].join(" "))
+    comp = get_shell.host_computer
+    file = comp.File(current_path + "/wifi.txt")
+    if file == null then 
+        comp.touch(current_path, "wifi.txt")
+        file = comp.File(current_path + "/wifi.txt")
+        if file == null then return
+    end if
+    line = [netdevice, bssid, essid, password].join(" ")
+    content = file.get_content
+    if content == "" then 
+        content = line
+    else
+        content = content + char(10) + line
+    end if
+    file.set_content(content)
+end function
+
+decryptPass = function(filepath)
+    key = cryptools.aircrack(filepath)
+    return key
+end function
+
+monitorNetwork = function(bssid, pwr, essid)
+    acksRequired = (300000.0 / (pwr + 15.0))
+	ui.debug("trying aireplay " + [bssid, essid, pwr, acksRequired].join(" "))
+    ui.info(cryptools.aireplay(bssid, essid, acksRequired))
+end function
+
+scanNetwork = function(network)
+    if network == null then return null
+    if not network isa string then return null
+    info = network.split(" ")
+    if info.len < 3 then return null
+	ui.debug("scanning network " + network)
+    bssid = info[0]
+    pwr = info[1].remove("%").val
+    essid = info[2]
+    if checkAlredyHaveResult(bssid, essid) then return null
+	ui.debug("extracted " + [bssid, pwr, essid].join(" "))
+    monitorNetwork(bssid, pwr, essid)
+    pass = decryptPass(current_path + "/file.cap")
+    return [bssid, pwr, essid, pass]
+end function
+
+scanDevice = function(device)
+    if device == null then return null
+    if not device isa string or device.len == 0 then return null
+    ui.info(device)
+    info = device.split(" ")
+    if info.len < 3 then return null
+    interface = info[0]
+    monitorSupport = info[2]
+    if interface.indexOf("wlan") == null then return null
+    if not monitorSupport then return null
+    comp = get_shell.host_computer
+    networks = comp.wifi_networks(interface)
+    for net in networks
+        result = scanNetwork(net)
+        if result == null then continue
+        saveResult(interface, result[0], result[2], result[3])
+    end for
+end function
+
+cryptools = include_lib("/lib/crypto.so")
+if not cryptools then cryptools = include_lib(current_path + "/crypto.so")
+if not cryptools then exit(ui.color("Error: Missing crypto library", "danger"))
+args = ArgParser.parse(params)
+comp = get_shell.host_computer
+devices = comp.network_devices.split(char(10))
+if devices == null or devices.len == 0 then exit(ui.color("No network devices found"))
+for device in devices
+    scanDevice(device)
+end for

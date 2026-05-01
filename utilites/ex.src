@@ -1,0 +1,273 @@
+import_code("/home/intel/sources/acli.src")
+import_code("/home/intel/sources/ui.src")
+import_code("/home/intel/sources/exploit.src")
+import_code("/home/intel/sources/meta.src")
+
+ex = null
+args = ArgParser.parse(params)
+
+logLevel = args.get("--level", "info")
+ui.setLogLevel(logLevel)
+
+parseCreds = function(credsStr)
+	arr = credsStr.split("@")
+	ui.debug("--remote arguments array: " + arr)
+	if arr.len < 3 then
+		ui.error("creds usage: user@pass@ip[@port=22@service=ssh]")
+		exit()
+	end if
+	retval = {}
+	retval.user = arr[0]
+	retval.pass = arr[1]
+	retval.ip = arr[2]
+	retval.port = 22
+	retval.service = "ssh"
+	if arr.len > 3 then retval.port = arr[3].val
+	if arr.len > 4 then retval.service = arr[4]
+	return retval
+end function
+
+remoteMetaxploitStr = args.get("--remote-metaxploit", null)
+if remoteMetaxploitStr != null then
+	creds = parseCreds(remoteMetaxploitStr)
+	ex = ExploitCore.remoteInit(creds.user, creds.pass, creds.ip, creds.port, creds.service)
+	if not ex then
+		ex = ExploitCore.init
+		if not ex then
+			ui.error("can't find metaxploit.so")
+			exit()
+		end if
+	end if
+else
+	ex = ExploitCore.init
+	if not ex then
+		ui.error("can't find metaxploit.so")
+		exit()
+	end if
+end if
+
+getLocalDump = function()
+	if args.positional.len == 0 then
+		ui.error("use positional arguments")
+		exit()
+	end if
+	isIp = is_valid_ip(args.positional[0])
+	isLibrary = not isIp
+	if isIp then
+		targetIp = args.positional[0]
+		if args.positional.len > 1 then
+			ex.loadRemoteDump(targetIp, args.positional[1].val)
+		else
+			ex.loadRemoteDump(targetIp)
+		end if
+	else
+		ex.loadLibDump(args.positional[0])
+	end if
+end function
+getRemoteDump = function()
+	ui.info("remote use, executing on " + get_shell.host_computer.public_ip)
+	customObject = get_custom_object
+	if customObject.hasIndex("targetLib") then ex.targetLib = customObject.targetLib
+end function
+
+if args.has("--remote-called") then
+	getRemoteDump()
+	if not ex.hasIndex("targetLib") or ex.targetLib == null then 
+		ui.info("can't load remote dump, getting local dump")
+		getLocalDump()
+	end if
+else
+	getLocalDump()
+end if
+
+remote_str = args.get("--remote", null)
+if remote_str != null then
+	arr = remote_str.split("@")
+	ui.debug("--remote arguments array: " + arr)
+	if arr.len < 3 then
+		ui.error("--remote usage: --remote user@pass@ip[@port=22@service=ssh]")
+		exit()
+	end if
+	user = arr[0]
+	pass = arr[1]
+	ip = arr[2]
+	port = 22
+	service = "ssh"
+	if arr.len > 3 then port = arr[3].val
+	if arr.len > 4 then service = arr[4]
+	ui.info("connecting to remote exploiter: " + [user,pass,ip,port,service].join(" "))
+	obj = get_custom_object
+	obj.targetLib = ex.targetLib
+	shell = get_shell.connect_service(ip, port, user, pass, service)
+	if shell == null then 
+		ui.error("can't connect to remote shell")
+	else if shell isa string then
+		ui.error(shell)
+	else
+		exit(shell.launch("/bin/ex", "--remote-called --level " + logLevel))
+	end if
+end if
+
+
+addr = args.get("-a", null)
+zone = args.get("-z", null)
+if addr and zone then
+	result = ex.attack(addr, zone, args.get("-args", ""))
+	if result == null then
+		ui.warn("attack has null result")
+		exit()
+	end if
+	if not Meta.isClass(result) then
+		ui.info(result)
+		exit()
+	else
+		Meta.startMenu(result)
+		exit()
+	end if
+end if
+
+createOrToucn = function(dirpath, filename)
+	file = get_shell.host_computer.File(dirpath + "/" + filename)
+	if file == null then get_shell.host_computer.touch(dirpath, filename)
+	file = get_shell.host_computer.File(dirpath + "/" + filename)
+	return file
+end function
+
+saveScan = function(dirpath, libname, libver, scanResult)
+	if dirpath == null or not dirpath isa string or dirpath.len == 0 then dirpath = get_abs_path("~") + "/scans"
+	if get_shell.host_computer.File(dirpath) == null then get_shell.host_computer.create_folder(dirpath)
+	file = createOrToucn(dirpath, libname + "_" + libver + ".scan")
+	if file == null then
+		ui.error("cant open or create scan file to save results " + dirpath + "/" + libname + "_" + libver + ".scan")
+		return
+	end if
+	content = ""
+	for sr in scanResult
+		content = content + sr.addr + " " + sr.scanstr + char(10)
+	end for
+	file.set_content(content)
+end function
+
+loadScan = function(dirpath, libname, libver)
+	if dirpath == null or not dirpath isa string or dirpath.len == 0 then dirpath = get_abs_path("~") + "/scans"
+	ui.debug("looking for file in " + dirpath + "/" + libname + "_" + libver + ".scan")
+	file = get_shell.host_computer.File(dirpath + "/" + libname + "_" + libver + ".scan")
+	if file == null then 
+		ui.debug("nothing found")
+		return null
+	end if
+	scanResult = []
+	content = file.get_content
+	ui.debug("file content: " + content)
+	ui.debug("__________")
+	lines = content.split(char(10))
+	sr = {}
+	for line in lines
+		if line == "" then continue
+		if line.indexOf("0x") == 0 then
+			if sr != {} then 
+				scanResult.push(sr)
+				sr = {}
+			end if
+			splitted = line.split(" ")
+			sr.addr = splitted[0]
+			splitted.remove(0)
+			sr.scanstr = splitted.join(" ")
+		else
+			sr.scanstr = sr.scanstr + char(10) + line
+		end if
+	end for
+	if sr != {} then scanResult.push(sr)
+	if scanResult.len == 0 then 
+		ui.debug("scan results: " + scanResult)
+		return null
+	end if
+	return scanResult
+end function
+
+
+
+scanResult = loadScan(null, ex.targetLib.lib_name, ex.targetLib.version)
+if scanResult == null then 
+	vs = ex.getVulnerabilities()
+	if vs == null then
+		ui.warn("no vulnerabilities found")
+		exit()
+	end if
+	scanResult = ex.scanVulnerabilities(vs)
+	saveScan(null, ex.targetLib.lib_name, ex.targetLib.version, scanResult)
+end if
+
+vulns = []
+i = 1
+for sr in scanResult
+	varr = ex.parseScan(sr.scanstr)
+	ui.debug("parseScan: " + varr)
+	for v in varr
+		vuln = v
+		vuln["addr"] = sr.addr
+		vuln["num"] = i
+		i = i + 1
+		vulns.push(vuln)
+	end for
+end for
+ui.debug("vulns: " + vulns)
+headers = ["#", "ADDR", "ZONE", "STATUS", "CONDITIONS"]
+keys = ["num", "addr", "zone", "status"]
+//data = []
+
+log_enabled = args.has("-l") or args.has("--log")
+log_path = args.get("-l", null)
+if log_path == null then log_path = args.get("--log", null)
+
+if vulns == null or vulns == [] then
+	ui.error("error: can't find any vulnurability, try to update metaxploit.so")
+	exit()
+end if
+
+while true
+	options = []
+	for m in vulns
+		opt = {}
+		text = [m.addr, m.zone].join(" ")
+	    if m.hasIndex("cond") then 
+	        for c in m.cond
+	            text = text + char(10) + c
+	        end for
+	    end if
+		opt.text = text
+		opt.value = m
+		options.push(opt)
+	end for
+	if log_enabled then
+		if log_path == null then log_path = ex.targetLib.lib_name + "_" + ex.targetLib.version + ".scan"
+		str = ""
+		for opt in options
+			str = str + opt.text + char(10)
+		end for
+		ui.saveLog(log_path, str)
+	end if
+
+	opt = ui.select("pick vulnerability", options, true)
+	if opt == null then 
+		ui.error("error: menu returned null opt")
+		break
+	end if
+	if opt.value == null then break
+	args = ui.ask("args")
+	result = ex.attack(opt.value.addr, opt.value.zone, args)
+	if result == null then
+		ui.warn("attack has null result")
+		user_input("press any key...", false, true)
+		continue
+	end if
+	if not Meta.isClass(result) then
+		ui.debug(result)
+		user_input("press any key...", false, true)
+	else
+		Meta.startMenu(result)
+	end if
+end while
+
+//table = ui.table(headers, data)
+//print(table)

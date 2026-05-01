@@ -1,0 +1,42 @@
+import_code("/home/intel/argparser.src")
+import_code("/home/intel/ui.src")
+
+FileHandle = {}
+
+FileHandle.init = function(file)
+    if not file isa File then return null
+    self = new FileHandle
+    self.file = file
+    self.meta = file["__isa"]
+    self.allow_import = {}
+    self.allow_import.method = self.meta["allow_import"]
+    self.allow_import.help = "allow_import(): number" + char(10) +"Returns a number. If the file is binary and can be imported by other scripts, the value will be one; otherwise, the value will be zero. In case the file gets deleted, this method will cause a crash."
+    self.chmod = {}
+    self.chmod.method = self.file.chmod
+    return self
+end function
+
+FileHandle.displayHelp = function(cmd)
+    if cmd == "" or cmd == null then
+        //display main help
+    end if
+end function
+
+FileHandle.commandMode = function()
+    exitCommandMode = false
+    while not exitCommandMode
+        message = self.file.path() + ": "
+        if self.file.is_symlink then message.insert(0, "@ ")
+        input = user_input(message, 0, 0, 1)
+        self.args = ArgParser.parse(input)
+        helpRequested = self.args.has("-h") or self.args.has("--help")
+        if self.args.positional.len == 0 then 
+            if helpRequested then self.displayHelp("")
+            continue
+        else
+            if helpRequested then self.displayHelp(self.args.positional[0])
+        end if
+
+    end while
+
+end function

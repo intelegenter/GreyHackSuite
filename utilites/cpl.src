@@ -1,0 +1,15 @@
+//cpl.src - clear proxy logs
+//import_code("/home/intel/sources/acli.src")
+user = "root"
+pass = "fart"
+ip = "201.148.195.4"
+service = "ssh"
+port = 22
+shell = get_shell.connect_service(ip, port, user, pass, service)
+comp = get_shell.host_computer
+file = comp.File("system.log")
+if not file then comp.touch(current_path, "system.log")
+if not file then exit("can't make log stub")
+file.set_content("just a content")
+result = get_shell.scp(current_path + "/system.log", "/var", shell, false)
+if result isa string then exit(result)

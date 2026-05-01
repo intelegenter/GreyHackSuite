@@ -1,0 +1,9 @@
+
+headers = ["PORT", "SERVICE", "VERSION", "STATUS"]
+data = [
+    ["22", "SSH", ui.color("v7.2", "warning"), ui.color("OPEN", "success")],
+    ["80", "HTTP", "Apache 2.4", ui.color("CLOSED", "danger")],
+    ["443", "HTTPS", "Nginx", ui.color("OPEN", "success")]
+]
+
+ui.table(headers, data)

@@ -1,0 +1,101 @@
+//readmail.src
+import_code("/home/intel/sources/acli.src")
+import_code("/home/intel/sources/ui.src")
+//ip adress regexp: \b(?:\d{1,3}\.){3}\d{1,3}\b
+args = ArgParser.parse(params)
+
+ui.setLogLevel(args.get("--level", "info"))
+
+if args.positional.len == 0 then exit(ui.color("specify desired file", "accent"))
+filename = args.positional[0]
+filepath = get_abs_path(filename)
+file = get_shell.host_computer.File(filepath)
+if not file then exit(ui.color("can't open file " + filepath, "danger"))
+if file isa string then exit(ui.color(file, "danger"))
+if typeof(file) != "file" then exit(ui.color("file object type mismatch: " + typeof(file), "danger"))
+
+content = file.get_content
+ui.debug("loaded " + content.split(char(10)).len + "lines of text")
+lines = content.split(char(10))
+
+results = []
+prefix = "    "
+for line in lines
+    if line.indexOf("@") == null then 
+        continue
+    end if
+    line = line.trim
+    ui.debug(line)
+    creds = line.split(":")
+    if creds.len < 2 then continue
+    login = creds[0]
+    password = creds[1]
+    mail = mail_login(login, password)
+    if not mail then 
+        ui.debug("can't login into mail with " + login + " " + password)
+        continue
+    end if
+    if mail isa string then 
+        ui.error(mail)
+        continue
+    end if
+    entries = mail.fetch()
+    ui.debug("entries(" + entries.len + "): " + entries)
+    result = {"login": login, "password": password, "mails": []}
+    for entry in entries
+        segments = entry.split(char(10))
+        ui.debug("segments: " + segments)
+        item = {}
+        item.mailId = segments[2][8:]
+        item.from = segments[3][6:]
+        item.subject = segments[4][9:]
+        item.preview = segments[5:]
+        ui.debug("read mail: " + mail.read(item.mailId))
+        text = mail.read(item.mailId)
+        textLines = text.split(char(10))
+        for i in range(0, 2)
+            if textLines.len > 0 then
+                textLines.remove(0)
+            else
+                break
+            end if
+        end for
+        item.text = prefix + textLines.join(char(10) + prefix)
+        ipsEntries = item.text.matches("\b(?:\d{1,3}\.){3}\d{1,3}\b")
+        if ipsEntries.indexes.len > 0 then 
+            ui.warn(ipsEntries.values)
+        end if
+        ui.debug("item: " + item)
+        result.mails.push(item)
+    end for
+    results.push(result)
+end for
+ui.debug("results(" + results.len + ")")
+newContent = ""
+for result in results
+    newContent = newContent + result.login + char(10)
+    for mail in result.mails
+        newContent = newContent + prefix + "from: " + mail.from + char(10)
+        newContent = newContent + prefix + "subject: " + mail.subject + char(10)
+        newContent = newContent + prefix + mail.text + char(10)
+    end for
+end for
+
+outputFileName = "mail-" + file.name
+outputPath = file.parent.path
+ui.debug("output path: " + outputPath)
+ui.debug("touch: folder = " + outputPath + "; name = " + outputFileName)
+touchResult = get_shell.host_computer.touch(outputPath, outputFileName)
+ui.debug("touch result: " + touchResult)
+outputFile = get_shell.host_computer.File(outputPath + "/" + outputFileName)
+if not outputFile then
+    //print(newContent)
+    ui.warn("no output file")
+    exit()
+else if outputFile isa string then
+    //print(newContent)
+    ui.warn("no output file, file isa string")
+    exit(outputFile)
+end if
+outputFile.set_content(newContent)
+ui.success("mail downloaded into " + outputPath)

@@ -1,0 +1,123 @@
+import_code("/home/intel/sources/acli.src")
+import_code("/home/intel/sources/ui.src")
+cryptools = include_lib("/lib/crypto.so")
+if not cryptools then exit(ui.color("Error: Missing crypto library", "danger"))
+
+helpStr = "usage: 'decipher filePath' or 'decipher hashString' or 'decipher -s user:hashString' or 'decipher filePath -a'"
+
+GetPassword = function(userPass)
+	password = cryptools.decipher(userPass)
+	return password
+end function
+
+args = ArgParser.parse(params)
+if args.has("-h") or args.has("--help") then
+	exit(ui.color(helpStr, "accent"))
+end if
+
+ui.setLogLevel(args.get("--level", "info"))
+
+argument = null
+if args.positional.len > 0 then argument = args.positional[0]
+hash = args.get("-s", null)
+if hash == null then hash = args.get("--string", null)
+if hash != null then
+	arr = hash.split(":")
+	if arr.len > 1 then ui.log("user = " + arr[0])
+	password = GetPassword(arr[-1])
+	if password != null then 
+		ui.success("password found => " + password)
+	else
+		ui.error("can't find password")
+		exit(ui.color(helpStr, "accent"))
+	end if
+	exit()
+end if
+
+if args.positional.len < 1 or args.has("-h") or args.has("--help") then
+	exit(ui.color(helpStr, "accent"))
+end if
+	
+origFile = get_abs_path(params[0])
+file = get_shell.host_computer.File(origFile)
+if not file then 
+	password = GetPassword(params[0])
+	if not password then 
+		exit(ui.color("decipher: can't find " + origFile, "danger"))
+	else
+		exit(ui.color(password, "success"))
+	end if
+end if 
+if file.is_binary then exit("decipher: can't read " + origFile + ". Binary file")
+if not file.has_permission("r") then exit("decipher: can't read file. Permission denied")
+if file.get_content.len == 0 then exit("decipher: no users found")
+
+content = file.get_content
+lines = content.split(char(10))
+if args.has("-a") or args.has("--all") then
+	for line in lines
+		input = poll_input
+		if input == "q" then break
+		if line.len == 0 then continue
+		arr = line.split(":")
+		if arr.len < 2 then continue
+		if arr[1].len == 0 then continue
+		cypher = arr[1]
+		if cypher == "no_pass" then continue
+		ui.info(arr[0].trim)
+		password = GetPassword(cypher)
+		if not password then continue
+		content = content.replace(cypher, password)
+	end for
+	ui.debug("creating output file " + "decrypted_" + file.name + " in path " + file.parent().path) 
+	ui.debug(get_shell.host_computer.touch(file.parent().path, "decrypted_" + file.name))
+	outputFile = get_shell.host_computer.File(file.parent().path + "/" + "decrypted_" + file.name)
+	if not outputFile then
+		ui.debug("can't open " + file.parent().path + "/" + "decrypted_" + file.name)
+		print(content)
+	else
+		outputFile.set_content(content)
+		ui.info("output saved into " + outputFile.path)
+	end if
+	exit(ui.color("finished", "success"))
+end if 
+password = null
+if lines.len == 1 then
+	userPass = lines[0].split(":")
+	if userPass.len != 2 then
+		ui.error("wrong syntax: " + userPass)
+		exit()
+	end if 
+	password = GetPassword(userPass[1])
+else
+	print("Multiple users found.")
+	numLine = 1
+	for line in lines
+		if line.len > 0 then
+			print(numLine + ": " + line)
+			numLine = numLine + 1
+		end if
+	end for
+	option = ""
+	inputOk = false
+	while( not inputOk )
+		option = user_input("Select user: ").to_int
+		if typeof(option) != "number" or (option < 1 or option > lines.len) then
+			print("Invalid input. Type a valid number")
+		else 
+			inputOk = true
+		end if
+	end while
+
+	userPass = lines[option - 1].split(":")
+	if userPass.len != 2 then
+		ui.error("wrong syntax: " + userPass)
+		exit(ui.color(helpStr, "accent"))
+	end if 
+	print("Selected user: " + userPass[0] + "\nDeciphering...")
+	password = GetPassword(userPass[1])
+end if
+	
+if not password then exit("Can't find password :'(")
+print("password found! => " + password)
+	

@@ -1,0 +1,240 @@
+//pmap.src
+import_code("/home/intel/sources/acli.src")
+import_code("/home/intel/sources/ui.src")
+import_code("/home/intel/sources/netutils.src")
+
+// 1. Инициализация и проверка аргументов
+args = ArgParser.parse(params)
+
+ui.setLogLevel(args.get("--level", "info"))
+target = ""
+if args.get("-t") != null then 
+	target = args.get("-t")
+else if args.positional.len > 0 then
+	target = args.positional[0]
+end if
+
+if target == "127.0.0.1" then 
+	ui.info("указан локальный адрес устройства, вычисляю сетевой адрес")
+	target = get_shell.host_computer.local_ip
+	ui.info("сетевой адрес: " + target)
+end if
+
+scanIp = true
+
+log_name = ""
+log_enabled = false
+if args.has("-l") or args.has("--log") then
+	log_enabled = true
+else if args.get("-l") != null then
+	log_name = args.get("-l")
+else if args.get("--log") != null then
+	log_name = args.get("-log")
+end if
+
+if not target or not is_valid_ip(target)then
+    ui.error("Не указана цель!")
+    print("Использование: pmap [IP] [-ns, --net-scan] [ [-l, --log] [log_file_name] ] [[-f, --find targetLib] [-ff, --findfrom ip]];" + char(10) + "имя файла логов по умолчанию: scan_(IP).txt")
+    scanIp = false
+end if
+scanByIp = function()
+	isLanIp = is_lan_ip(target)
+	router = null
+	if isLanIp then
+		ui.debug("целевой адрес находится в локальной сети")
+		router = get_router;
+	else 
+		ui.debug("целевой адрес находится в глобальной сети")
+		router = get_router( target )
+	end if
+	if log_enabled then log_name = "scan_" + target + ".txt"
+
+	if router == null then 
+		ui.error("целевое устройство не найдено")
+		return null
+	end if
+
+	ui.debug("Начинаю сканирование цели: " + ui.color(target, "accent"))
+	ui.debug("-" * 50)
+
+	ports = []
+	if not isLanIp then
+	ports = router.used_ports
+	else
+	ports = router.device_ports(target)
+	end if
+
+	if typeof(ports) == "string" then 
+		ui.error(ports)
+		return router
+	else if ports == null then
+		ui.error("порты устройства не найдены")
+		return router
+	else if ports.len == 0 then
+		ui.error("все порты устройства закрыты")
+		return router
+	end if
+
+	// Собираем данные для таблицы
+	table_data = []
+	ui.debug("Найдено портов: " + ports.len)
+	printRouter = function(router)
+		ui.debug(["bssid", router.bssid_name].join(":"))
+		ui.debug(["essid", router.essid_name].join(":"))
+	end function
+	printPort = function(port)
+		ui.debug(["lan_ip", port.get_lan_ip].join(":"))
+		ui.debug(["is_closed", port.is_closed].join(":"))
+		ui.debug(["number", port.port_number].join(":"))
+	end function
+	printRouter(router)
+	for port in ports
+		printPort(port)
+		ui.debug("router.port_info(port)")
+		ui.debug(router.port_info(port))
+		service_info = router.port_info(port).split(" ")
+		ui.debug("port.get_lan_ip")
+		lan_ips = port.get_lan_ip
+		
+		port_status = ui.color("OPEN", "success")
+		ui.debug("port.is_closed")
+		if(port.is_closed and not isLanIp) then 
+			port_status = ui.color("CLOSED", "danger")
+		end if
+		
+		// Добавляем строку в массив данных таблицы
+		ui.debug("port.port_number")
+		table_data.push([
+			str(port.port_number),
+			port_status, 
+			service_info[0],
+			service_info[1], 
+			lan_ips])
+	end for
+	// 4. Вывод результата
+	table = ui.table(["PORT", "STATUS", "SERVICE", "VERSION", "LAN"], table_data)
+	print(table)
+
+	ui.success("Сканирование завершено.")
+	return router
+end function
+if scanIp then
+	router = scanByIp()
+	if router then
+		tree = ""
+		if args.has("-ns") or args.has("--net-scan") then
+			rootNode = NetUtils.scanNetwork(router)
+			tree = ui.tree(rootNode)
+			print(tree)
+		end if
+
+		if log_enabled then
+			if log_name.len == 0 then log_name = "scan_report_" + current_date + ".txt"
+			content = "Scan report for " + target + char(10)
+			content = content + ui.stripTags(table)
+			if tree.len > 0 then
+				content = content + char(10) + ui.stripTags(tree)
+			end if
+			ui.saveLog(log_name, content)
+		end if
+	end if
+end if
+ipFromInt = function(num)
+	amask = bitwise("<<", 255, 8*3)
+	bmask = bitwise("<<", 255, 8 * 2)
+	cmask = bitwise("<<", 255, 8)
+	dmask = 255
+	a = bitwise(">>", bitwise("&", num, amask), 8 * 3)
+	b = bitwise(">>", bitwise("&", num, bmask), 8 * 2)
+	c = bitwise(">>", bitwise("&", num, cmask), 8)
+	d = bitwise("&", num, dmask)
+	ip = [a,b,c,d].join(".")
+	return ip
+end function
+intFromIp = function(ip)
+	if ip == null then return null
+	ui.debug(ip)
+	numList = ip.split("\.")
+	a = numList[0].val
+	b = numList[1].val
+	c = numList[2].val
+	d = numList[3].val
+
+	a = bitwise("<<", a, 8 * 3)
+	b = bitwise("<<", b, 8 * 2)
+	c = bitwise("<<", c, 8)
+	return a + b + c + d
+end function
+
+hasMatch = function(analyzed, expression, linesArr)
+	ui.debug(analyzed + " " + expression)
+	orExpr = expression.split("\|")
+	ui.debug("splitted by |: " + orExpr) 
+	andExpr = []
+	for ore in orExpr
+		if ore.indexOf("&") == null then continue
+		ande = ore.split("&")
+		for ae in ande
+			andExpr.push(ae)
+		end for
+	end for
+	ui.debug("'and' entries: " + andExpr)
+	if orExpr.len == 1 then orExpr = []
+	ui.debug("fixed or entries: " + orExpr)
+	matchOr = false
+	for ore in orExpr
+		if analyzed.indexOf(ore) != null then
+			ui.debug("found or pattern " + ore)
+			matchOr = true
+			break
+		end if
+	end for
+	matchAnd = andExpr.len > 0
+	for ande in andExpr
+		if analyzed.indexOf(ande) == null then
+			matchAnd = false
+			ui.debug("found and mismatch " + ande)
+			break
+		end if
+	end for
+	ui.debug(matchOr + " " + matchAnd)
+	return matchOr or matchAnd
+end function
+
+targetLib = args.get("-f", null)
+if targetLib == null then targetLib = args.get("--find", null)
+if targetLib != null then
+	if log_enabled and log_name.len == 0 then log_name = "scan_for_" + targetLib + ".txt"
+	ui.info("searching for lib '" + targetLib + "', press 'q' to stop")
+	dip = intFromIp(args.get("-ff", null))
+	if dip == null then dip = intFromIp(args.get("--findfrom", "1.1.1.1"))
+	counter = 0
+	targetLibList = targetLib.split("|")
+	while dip < 4294967295
+		key = poll_input
+		if key == "q" then break
+		if counter % 100 == 0 then
+			ui.info("scanned " + counter + " ips, current: " + ipFromInt(dip))
+		end if
+		ip = ipFromInt(dip)
+		router = get_router(ip)
+		if router == null or router isa string then continue
+		ports = router.used_ports()
+		portsWhole = ""
+		for port in ports
+			info = ""
+			info = "  [" + port.port_number + "]:" + router.port_info(port)
+			portsWhole = portsWhole + char(10) + info
+		end for
+		ui.debug("port whole: " + portsWhole)
+		output = ip + ":" + portsWhole
+		if hasMatch(portsWhole, targetLib) then
+			ui.warn(output)
+			if log_name.len != 0 then ui.saveLog(log_name, output, true)
+		else	
+			ui.debug(output)
+		end if
+		dip = dip + 1
+		counter = counter + 1
+	end while
+end if

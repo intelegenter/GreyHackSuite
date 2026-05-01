@@ -1,0 +1,74 @@
+// ArgParser.src
+ArgParser = {}
+ArgParser.options = {}
+ArgParser.flags = []
+ArgParser.positional = []
+
+// Основная функция парсинга
+ArgParser.parse = function(args)
+    self = new ArgParser
+    self.options = {}
+    self.flags = []
+    self.positional = []
+    
+    i = 0
+    while i < args.len
+        arg = args[i]
+        
+        if arg.indexOf("-") == 0 then
+            // Проверяем, есть ли следующее значение и не является ли оно другим флагом
+            if i + 1 < args.len and args[i+1].indexOf("-") != 0 then
+                self.options[arg] = args[i+1]
+                i = i + 2
+            else
+                self.flags.push(arg)
+                i = i + 1
+            end if
+        else
+            self.positional.push(arg)
+            i = i + 1
+        end if
+    end while
+    return self
+end function
+
+// Удобные методы получения данных
+ArgParser.get = function(key, defaultValue = null)
+    if self.options.hasIndex(key) then return self.options[key]
+    return defaultValue
+end function
+
+ArgParser.has = function(flag)
+    return self.flags.indexOf(flag) != null
+end function
+
+ArgParser.selfTest = function(test_params = ["127.0.0.1", "-p", "80", "--fast", "-v", "--user", "admin"])
+	args = ArgParser.parse(test_params)
+	print("<b>=== ТЕСТ ПАРСЕРА АРГУМЕНТОВ ===</b>")
+	print("\n<color=yellow>Опции (Ключ-Значение):</color>")
+	if args.options.len == 0 then
+	    print("  (пусто)")
+	else
+	    for key in args.options.indexes
+	        print("  " + key + " => " + args.options[key])
+	    end for
+	end if
+	print("\n<color=grey>Флаги (Булевы):</color>")
+	if args.flags.len == 0 then
+	    print("  (пусто)")
+	else
+	    for flag in args.flags
+	        print("  " + flag + " [АКТИВЕН]")
+	    end for
+	end if
+	// 3. Выводим позиционные аргументы
+	print("\n<color=lightblue>Позиционные аргументы:</color>")
+	if args.positional.len == 0 then
+	    print("  (пусто)")
+	else
+	    for i in range(0, args.positional.len - 1)
+	        print("  [" + i + "] " + args.positional[i])
+	    end for
+	end if
+	print("\n<b>=== ТЕСТ ЗАВЕРШЕН ===</b>")
+end function

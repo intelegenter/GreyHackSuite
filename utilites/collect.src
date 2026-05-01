@@ -1,0 +1,134 @@
+//collect.src
+import_code("/home/intel/sources/acli.src")
+import_code("/home/intel/sources/ui.src")
+import_code("/home/intel/sources/exploit.src")
+import_code("/home/intel/sources/meta.src")
+import_code("/home/intel/sources/netutils.src")
+
+helpStr = "usage: " + ui.color("collect (libname.so) (-a addr) (-z zone)", "accent")
+helpStr = helpStr + " or "
+helpStr = helpStr + ui.color("collect (ip) [port] (-a addr) (-z zone)", "accent")
+
+rootNode = NetUtils.scanNetwork(get_router)
+getIpList = function(node)
+    iplist = []
+    if node == null then return []
+    if not node.hasIndex("ip") then return []
+    iplist.push node.ip
+    if not node.hasIndex("children") then return iplist
+    children = node.children
+    if not children isa list then return iplist
+    for child in children
+        iplist = iplist + getIpList(child)
+    end for
+    return iplist
+end function
+ips = getIpList(rootNode)
+
+args = ArgParser.parse(params)
+ui.setLogLevel(args.get("--level", "info"))
+ex = ExploitCore.init()
+if ex == null then exit(ui.color("can't find metaxploit.so", "danger"))
+
+//metaxploit = include_lib("/lib/metaxploit.so")
+//if not metaxploit then metaxploit = include_lib(current_path + "/metaxploit.so")
+//if metaxploit == null then exit(ui.color("can't find metaxploit.so", "danger"))
+
+
+dump = null
+
+addr = args.get("-a", null)
+if addr == null then exit(helpStr)
+zone = args.get("-z", null)
+if zone == null then exit(helpStr)
+
+if args.positional.len == 0 then exit(helpStr)
+if args.positional.len > 1 and is_valid_ip(args.positional[0]) then
+    port = 0
+    if args.positional.len > 1 then port = args.positional[1].val
+    ex.loadRemoteDump(args.positional[0], port)
+    // netsession = metaxploit.net_use(args.positional, port)
+    // dump = netsession.dump_lib()
+else
+    libname = args.positional[0]
+    ex.loadLibDump(libname)
+    // dump = metaxploit.load("/lib/" + libname)
+    // if dump == null or dump isa string then exit(ui.color("cant dump lib " + libname, "danger"))
+end if
+
+if ex.targetLib == null then exit()
+
+ui.debug(ex.targetLib.lib_name + " " + ex.targetLib.version)
+
+infos = []
+for ip in ips
+    usersinfo = {}
+    usersinfo.ip = ip
+    ui.debug("overflowing on addr " + addr + " with zone " + zone)
+    comp = ex.attack(addr, zone, ip)
+    if comp == null then 
+        ui.error("overflow = null " + [addr, zone, ip].join(" "))
+        continue
+    else if comp isa string then 
+        ui.error("error: " + comp)
+        continue
+    else if not comp isa map then
+        ui.error("wrong object type: " + typeof(comp))
+        continue
+    end if
+    if not comp.hasIndex("classID") or comp.classID != "computer" then continue
+    homedir = comp.File("/home")
+    if homedir == null or homedir isa string then continue
+    homefolders = homedir.get_folders()
+    passwd = comp.File("/etc/passwd")
+    passwdcontent = passwd.get_content()
+    passentries = null
+    if passwdcontent != null then
+        usersinfo.passwd = passwdcontent
+        passentries = passwdcontent.split(char(10))
+    else
+        usersinfo.passwd = null
+    end if
+    usersinfo.users = []
+    for folder in homefolders
+        user = {"login": "no_user", "pass": "no_pass","mail": "no_mail", "bank": "no_bank"}
+        user.login = folder.name
+        if user.login == "guest" then continue
+        mail = comp.File("/home/" + user.login + "/Config/Mail.txt")
+        if mail != null and not mail isa string then user.mail = mail.get_content
+        bank = comp.File("/home/" + user.login + "/Config/Bank.txt")
+        if bank != null and not bank isa string then user.bank = bank.get_content
+        if passentries != null then
+            for entry in passentries
+                if entry.indexOf(user.login) == 0 then
+                    user.pass = entry.split(":")[1]
+                    break
+                end if
+            end for
+        end if
+        usersinfo.users.push(user)
+    end for
+    infos.push(usersinfo)
+end for
+
+result = ""
+for info in infos
+    result = result + info.ip + ":" + char(10)
+    for user in info.users
+        result = result + "    " + user.login + ":" + user.pass + char(10)
+        result = ui.color(result + "        " + user.mail + char(10), "accent")
+        result = ui.color(result + "        " + user.bank + char(10), "accent")
+    end for
+end for
+
+print(result)
+outputPath = current_path + "/collection"
+result = get_shell.host_computer.touch(outputPath)
+if result isa string then exit(ui.color(result, "danger"))
+if result isa number and result == 0 then exit(ui.color("output file wasn't created", "warning"))
+outputFie = get_shell.host_computer.File(outputPath)
+if not outputFile then exit(ui.color("can't open output file " + outputPath, "danger"))
+if outputFile isa string then exit(ui.color(outputFile, "danger"))
+if typeof(outputFile) != "file" then exit(ui.color("outputFile wrong type: " + typeof(outputFile), "danger"))
+ui.success("collection saved into " + outputFile.path)
+

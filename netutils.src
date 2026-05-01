@@ -1,0 +1,110 @@
+//netutils.src
+NetUtils = {}
+
+// Чистая логика определения типа
+NetUtils.getDeviceType = function(router, ports)
+    if not ports or ports.len == 0 then return "Workstation"
+    
+    // Создаем мапу для быстрого доступа к номерам портов
+    nums = {}
+    for p in ports
+        pinfo = router.port_info(p)
+        if pinfo.indexOf("cam") != null then 
+            return "CCTV Camera"
+        else if pinfo.indexOf("employees") != null then 
+            return "Database Server"
+        end if
+        nums[p.port_number] = true
+    end for
+    
+    if nums.hasIndex(3306) or nums.hasIndex(5432) then return "Database Server"
+    if nums.hasIndex(8080) or nums.hasIndex(554) then return "CCTV Camera"
+    if nums.hasIndex(80) and nums.hasIndex(443) and nums.len > 2 then return "Web Server"
+    if nums.hasIndex(22) and nums.len == 1 then return "Remote Host"
+    
+    return "Generic Device"
+end function
+
+NetUtils.scanDevice = function(router, ip)
+    deviceData = {"ip": ip, "ports": [], "type": "Unknown"}
+    
+    ports = router.device_ports(ip)
+    if typeof(ports) == "string" or ports == null then return deviceData
+    
+    for p in ports
+        info = router.port_info(p).split(" ")
+        // Сохраняем как удобный объект
+        deviceData.ports.push({"port": p, "num": p.port_number, "service": info[0], "ver": info[1]})
+    end for
+    
+    deviceData.type = self.getDeviceType(router, ports)
+    return deviceData
+end function
+
+NetUtils.printInfo = function(msg)
+    if not ui then print(msg)
+    ui.debug(msg)
+end function
+
+NetUtils.scanNetwork = function(router, targetIp = null, visited = null)
+    if visited == null then visited = {}
+    if targetIp == null then
+        NetUtils.printInfo("start scan from root router: " + router.local_ip)
+        node = self.scanDevice(router, router.local_ip)
+        node.type = "Router"
+        node["children"] = []
+        subIps = router.devices_lan_ip
+        NetUtils.printInfo("ip list: " + subIps)
+        visited[node.ip] = true
+        if subIps then
+            for nextIp in subIps
+                // РЕКУРСИЯ
+                childNode = self.scanNetwork(router, nextIp, visited)
+                if childNode then node.children.push(childNode)
+            end for
+        end if
+        return node
+    end if
+
+    // Защита от зацикливания
+    if visited.hasIndex(targetIp) then return null
+    visited[targetIp] = true
+
+    NetUtils.printInfo("scanning target ip: " + targetIp)
+
+    node = self.scanDevice(router, targetIp);
+    
+    // Пытаемся получить свитч напрямую по IP (Global метод)
+    sw = get_switch(targetIp)
+    if sw then
+        node.type = "Switch"
+        // Свитч в игре — это по сути роутер для своей подсети
+        node["children"] = []
+        subIps = sw.devices_lan_ip
+        NetUtils.printInfo(targetIp + " is switch, children: " + subIps)
+        if subIps then
+            for nextIp in subIps
+                // РЕКУРСИЯ
+                childNode = self.scanNetwork(sw, nextIp, visited)
+                if childNode then node.children.push(childNode)
+            end for
+        end if
+    else
+        rt = get_router(targetIp)
+        if rt then
+            node.type = "Router"
+            // Свитч в игре — это по сути роутер для своей подсети
+            node["children"] = []
+            subIps = rt.devices_lan_ip
+            NetUtils.printInfo(targetIp + " is router, children: " + subIps)
+            if subIps then
+                for nextIp in subIps
+                    // РЕКУРСИЯ
+                    childNode = self.scanNetwork(rt, nextIp, visited)
+                    if childNode then node.children.push(childNode)
+                end for
+            end if
+        end if
+    end if    
+    return node
+end function

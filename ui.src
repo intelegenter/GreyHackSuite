@@ -1,0 +1,295 @@
+//ui.src
+ui = {}
+
+ui.colors = {
+    "primary": "#5dade2", // blue
+    "success": "#58d68d", // green
+    "danger": "#ec7063",  // red
+    "warning": "#f4d03f", // yellow
+    "info": "#615de2",    // darkblue
+    "accent": "#af7ac5",   // purple
+    "debug": "#aeb6bf"}   // darkpurple
+
+
+ui.logLevels = {
+    "debug": 0,
+    "info": 1,
+    "minimal": 2}
+ui.logLevel = 0
+ui.setLogLevel = function(logLevel)
+    if not ui.logLevels.hasIndex(logLevel) then return
+    self.logLevel = ui.logLevels[logLevel]
+end function
+
+// Базовый метод покраски
+ui.color = function(text, colorCode)
+    if not colorCode then colorCode = self.colors.primary
+    if self.colors.hasIndex(colorCode) then colorCode = self.colors[colorCode]
+    return "<color=" + colorCode + ">" + text + "</color>"
+end function
+
+// Стилизация текста
+ui.bold = function(text); return "<b>" + text + "</b>"; end function
+ui.italic = function(text); return "<i>" + text + "</i>"; end function
+
+
+ui.debug = function(msg)
+    if self.logLevel < 1 then
+        print(self.color("[&] " + msg, "debug") )
+    end if
+end function
+ui.info = function(msg)
+    if self.logLevel < 2 then
+        print(self.color("[*] " + msg, "info") )
+    end if
+end function
+ui.success = function(msg); print(self.color("[+] "+ self.bold(msg), "success")); end function
+ui.error = function(msg); print(self.color("[!] "+ self.bold(msg), "danger")); end function
+ui.warn = function(msg); print(self.color("[?] "+ msg, "warning") ); end function
+ui.log = @ui.info
+
+ui.line = function(char = "-", length = 30)
+    print(self.color(char * length, "info"))
+end function
+
+ui.ask = function(question, defaultVal = "", addToHistory = false)
+    prefix = self.color(" > ", "accent")
+    
+    suffix = ": "
+    if defaultVal != "" then suffix = " [" + defaultVal + "]: "
+    
+    prompt_text = prefix + question + suffix
+    res = user_input(prompt_text, false, false, addToHistory)
+    
+    if res == "" and defaultVal != "" then return defaultVal
+    return res
+end function
+
+ui.confirm = function(msg, default = "")
+    while true
+		variants = ""
+		defaultVariant = null
+		if default == "y" then
+			variants = "(Y/n)"
+			defaultVariant = true
+		else if default == "n" then
+			variants = "(y/N)"
+			defaultVariant = false
+		else
+			variants = "(y/n)"
+		end if
+        res = self.ask(msg.lower() + " " + variants)
+		if res == "" and defaultVariant != null then return defaultVariant
+        if res == "y" or res == "yes" then return true
+        if res == "n" or res == "no" then return false
+        self.warn("Пожалуйста, введите 'y' или 'n'")
+    end while
+end function
+
+ui.select = function(title, options, addToHistory = false)
+    print(self.bold("\n" + title + ":"))
+    ui.debug("menu for: " + options)
+    if options == null or not options isa list or (options isa list and options.len == 0) then
+        ui.error("error: no options to select from")
+        return null
+    end if
+    for i in range(0, options.len - 1)
+        optText = ""
+		opt = options[i]
+        if options[i] isa map then
+            if options[i].hasIndex("text") then
+                optText = options[i].text
+            else if options[i].hasIndex("__isa") then
+                meta = options[i]["__isa"]
+                if meta.hasIndex("name") then
+                    optText = options[i].name
+                else
+                    optText = options[i]
+                end if
+            else
+                optText = options[i]
+            end if
+        else
+            optText = options[i]
+        end if
+        print(self.color(" [" + (i + 1) + "] ", "primary") + optText)
+    end for
+    print(self.color(" [0] ", "primary") + self.color(self.bold("cancel"), "accent"))
+    
+    while true
+        choice = self.ask("Выберите номер", "", addToHistory)
+        ui.debug("choice = " + choice + " of type " + typeof(choice))
+        if choice == "0" then
+            return {"text":"cancel", "value": null}
+        else if not choice or choice.val < 1 or choice.val > options.len then
+            self.error("Неверный выбор, попробуйте еще раз")
+        else
+            return options[choice.val - 1]
+        end if
+    end while
+end function
+
+ui.stripTags = function(text)
+    if text.indexOf("<") == null then return text
+    
+    parts = text.split("<")
+    cleanStr = parts[0]
+    
+    for i in range(1, parts.len - 1)
+        tagEnd = parts[i].indexOf(">")
+        if tagEnd != null then
+            cleanStr = cleanStr + parts[i][tagEnd + 1:]
+        else
+            cleanStr = cleanStr + "<" + parts[i]
+        end if
+    end for
+    return cleanStr
+end function
+
+ui.len = function(text)
+    return self.stripTags(text).len
+end function
+
+ui.table = function(headers, data)
+    colWidths = []
+    for h in headers; colWidths.push(self.len(h)); end for
+    for row in data
+		if row.len == 0 then continue
+        if row[0] == "_child" then continue
+        for i in range(0, row.len - 1)
+            l = self.len(str(row[i]))
+			if colWidths.len < i + 1 then 
+				colWidths.push(l)
+			else if l > colWidths[i] then 
+				colWidths[i] = l
+			end if
+        end for
+    end for
+
+    drawRow = function(rowItems, widths, isHeader = false)
+		if rowItems.len == 0 then return
+        line = ""
+        if rowItems[0] == "_child" then
+            line = line + "  > "
+            for i in range(1, rowItems.len - 1)
+                line = line + rowItems[i]
+            end for
+            return ui.color(line, "accent")
+        end if
+        line = "| "
+	    for i in range(0, rowItems.len - 1)
+	        item = str(rowItems[i])
+	        
+	        visibleLen = ui.len(item)
+	        
+	        padding = widths[i] - visibleLen
+	        
+	        content = item
+	        if isHeader then content = ui.color(item, "primary")
+	
+	        line = line + content + (" " * padding) + " | "
+	    end for
+	    return line
+	end function
+    
+	sep = "+"
+	for w in colWidths
+	    sep = sep + "-" * (w + 2) + "+"
+	end for
+    table = ""
+	if headers.len > 0 then
+	    table = table + sep + char(10)
+	    table = table + drawRow(headers, colWidths, true) + char(10)
+	end if
+	table = table + sep + char(10)
+    for row in data
+        table = table + drawRow(row, colWidths, false) + char(10)
+    end for
+	table = table + sep + char(10)
+	return table
+end function
+
+ui.getTime = function()
+    d = current_date
+    return d[d.len - 5:]
+end function
+
+ui.saveLog = function(filename, content, silent = false)
+    computer = get_shell.host_computer
+    file = computer.File(current_path + "/" + filename)
+	
+    if not file then
+        computer.touch(current_path, filename)
+        file = computer.File(current_path + "/" + filename)
+    end if
+
+    cleanContent = self.stripTags(content)
+	timestamp = self.getTime()
+    existing = file.get_content
+    if existing.len > 0 then
+        file.set_content(existing + char(10) + "[" + timestamp + "] " + cleanContent)
+    else 
+        file.set_content("[" + timestamp + "] " + cleanContent)
+    end if
+    if not silent then
+        self.info("Лог сохранен в: " + filename)
+    end if
+end function
+
+ui.treeChars = {
+    "branch": "|-- ", // ├─
+    "last": "`-- ",  // └─
+    "vertical": "|   "}          // │
+
+ui.treeText = function(node, prefix = "", isLast = true)
+    // connector = "├── "
+    connector = ui.treeChars.branch
+    // if isLast then connector = "└── "
+    if isLast then connector = ui.treeChars.last
+
+    text = ""
+    ui.debug("ui.treeText node = " + node + " node.indexes = " + node.indexes)
+    if node.hasIndex("text") then text = node.text
+    displayText = ui.color(text, "accent")
+    outStr = prefix + connector + displayText + char(10)
+    
+    newPrefix = prefix
+    if isLast then newPrefix = newPrefix + "    " else newPrefix = newPrefix + ui.treeChars.vertical
+    
+    if node.hasIndex("children") and node.children.len > 0 then
+        for i in range(0, node.children.len - 1)
+            outStr = outStr + self.treeText(node.children[i], newPrefix, i == node.children.len - 1)
+        end for
+    end if
+    return outStr
+end function
+
+ui.tree = function(node, prefix = "", isLast = true)
+    // connector = "├── "
+    connector = ui.treeChars.branch
+    // if isLast then connector = "└── "
+    if isLast then connector = ui.treeChars.last
+    
+    info = node.type
+    displayIp = ui.color(node.ip, "accent")
+    if node.type == "Router" or node.type == "Switch" then 
+        displayIp = ui.bold(ui.color(node.ip, "warning"))
+    end if
+    outStr = prefix + connector + displayIp + " " + ui.color("[" + info + "]", "info") + char(10)
+    
+    newPrefix = prefix
+    if isLast then newPrefix = newPrefix + "    " else newPrefix = newPrefix + ui.treeChars.vertical
+    
+    if node.hasIndex("ports") and node.ports.len > 0 then
+        portList = []
+        for p in node.ports; portList.push(p.num + "(" + p.service + ":" + p.ver + ")"); end for
+        outStr = outStr + newPrefix + ui.color("ports: " + portList.join(", "), "info") + char(10)
+    end if
+    
+    if node.hasIndex("children") and node.children.len > 0 then
+        for i in range(0, node.children.len - 1)
+            outStr = outStr + self.tree(node.children[i], newPrefix, i == node.children.len - 1)
+        end for
+    end if
+    return outStr
+end function
