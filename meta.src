@@ -297,6 +297,7 @@ Meta.menu = function()
         option = {}
         option.text = i + "(" + self.args[i].join(", ") + ")"
 		option.value = i
+        option.key = i
         options.push(option)
     end for
     option = ui.select("Pick function:", options)
