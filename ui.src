@@ -122,7 +122,7 @@ ui.select = function(title, options, default = "0", addToHistory = false)
     
     while true
         choice = ""
-        choice = self.ask("Выберите номер [" + default + "]:", "", addToHistory)
+        choice = self.ask("Pick number [" + default + "]", "", addToHistory)
         ui.debug("choice = " + choice + " of type " + typeof(choice))
         if choice == "" then 
             ui.debug("used default (" + typeof(default) + " " + default + ") variant")
@@ -138,6 +138,7 @@ ui.select = function(title, options, default = "0", addToHistory = false)
             self.error("Неверный выбор, попробуйте еще раз")
         else
             ret = options[choice.val - 1]
+            ui.debug("ret (" + ret + ")")
             ret["choice"] = choice
             return ret
         end if

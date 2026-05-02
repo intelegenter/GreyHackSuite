@@ -1,0 +1,32 @@
+//rshell.src
+import_code("/home/intel/sources/acli.src")
+import_code("/home/intel/sources/ui.src")
+
+helpStr = "Usage: rshell ip_adress port=1222 [-t|--title (process_title)]"
+
+lib = include_lib("/lib/metaxploit.so")
+if not lib then lib = include_lib(current_path + "/metaxploit.so")
+if lib == null then
+    ui.error("can't get metaxploit.so")
+    exit()
+end if 
+
+args = ArgParser.parse(params)
+
+ui.setLogLevel(args.get("--level", "info"))
+
+if args.positional.len == 0 then exit(ui.color(helpStr, "accent"))
+port = 1222
+if args.positional.len > 1 then port = args.positional[1].val
+ip = args.positional[0]
+if not is_valid_ip(ip) then
+    ui.error("Error: invalid ip adress " + ip)
+    ui.info(helpStr)
+    exit()
+end if
+
+
+title = args.get("-t", args.get("--title", "rshell_client"))
+
+lib.rshell_client(ip, port, title)
+ui.success("rshell connected to " + ip + ":" + port + ", process: " + title)

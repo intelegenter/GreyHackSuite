@@ -127,6 +127,33 @@ if addr and zone then
 	if not Meta.isClass(result) then
 		ui.info(result)
 		exit()
+	else if result.classID == "computer" then
+		ui.debug("computer, provide options")
+		compmenu = [{"text": "open", "value": "open", "key": "open"}, 
+					{"text": "collect", "value": "collect", "key": "collect"}]
+		subopt = ui.select("what do you want to do with computer?", compmenu, "1")
+		ui.debug("selected option: " + subopt.value)
+		if subopt == null then exit()
+		if subopt.value == "open" then 
+			ui.debug("opening computer")
+			Meta.startMenu(result)
+		else if subopt.value == "collect" then
+			ui.debug("collecting computer")
+			collector = Collector.init(ex, addr, zone)
+			if collector == null then 
+				ui.error("can't initialize collector")
+				exit()
+			end if
+			router = null
+			if ex.hasIndex("targetIp") then 
+				router = get_router(ex.targetIp)
+			else
+				router = get_router()
+			end if
+			ui.debug("scanning root router of " + router.public_ip()) 
+			collector.scanRouter(router)
+			Meta.startMenu(collector)
+		end if
 	else
 		Meta.startMenu(result)
 		exit()
@@ -294,7 +321,14 @@ while true
 				ui.error("can't initialize collector")
 				continue
 			end if
-			collector.scanRouter(get_router)
+			router = null
+			if ex.hasIndex("targetIp") then 
+				router = get_router(ex.targetIp)
+			else
+				router = get_router()
+			end if
+			ui.debug("scanning root router of " + router.public_ip()) 
+			collector.scanRouter(router)
 			Meta.startMenu(collector)
 		end if
 	else

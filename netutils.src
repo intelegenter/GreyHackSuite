@@ -38,19 +38,15 @@ NetUtils.scanDevice = function(router, ip)
     return deviceData
 end function
 
-NetUtils.printInfo = function(msg)
-    ui.debug(msg)
-end function
-
 NetUtils.scanNetwork = function(router, targetIp = null, visited = null)
     if visited == null then visited = {}
     if targetIp == null then
-        //NetUtils.printInfo("start scan from root router: " + router.local_ip)
+        ui.debug("start scan from root router: " + router.local_ip)
         node = self.scanDevice(router, router.local_ip)
         node.type = "Router"
         node["children"] = []
         subIps = router.devices_lan_ip
-        //NetUtils.printInfo("ip list: " + subIps)
+        ui.debug("ip list: " + subIps)
         visited[node.ip] = true
         if subIps then
             for nextIp in subIps
@@ -65,7 +61,7 @@ NetUtils.scanNetwork = function(router, targetIp = null, visited = null)
     //recursion protection
     if visited.hasIndex(targetIp) then return null
     visited[targetIp] = true
-    NetUtils.printInfo("scanning target ip: " + targetIp)
+    ui.debug("scanning target ip: " + targetIp)
     node = self.scanDevice(router, targetIp);
 
     sw = get_switch(targetIp)
@@ -73,7 +69,7 @@ NetUtils.scanNetwork = function(router, targetIp = null, visited = null)
         node.type = "Switch"
         node["children"] = []
         subIps = sw.devices_lan_ip
-        NetUtils.printInfo(targetIp + " is switch, children: " + subIps)
+        ui.debug(targetIp + " is switch, children: " + subIps)
         if subIps then
             for nextIp in subIps
                 // RECURSION
@@ -87,7 +83,7 @@ NetUtils.scanNetwork = function(router, targetIp = null, visited = null)
             node.type = "Router"
             node["children"] = []
             subIps = rt.devices_lan_ip
-            NetUtils.printInfo(targetIp + " is router, children: " + subIps)
+            ui.debug(targetIp + " is router, children: " + subIps)
             if subIps then
                 for nextIp in subIps
                     // RECURSION

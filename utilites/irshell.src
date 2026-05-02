@@ -1,0 +1,111 @@
+//irshell.src
+import_code("/home/intel/sources/acli.src")
+import_code("/home/intel/sources/ui.src")
+metaxploit = include_lib("/lib/metaxploit.so")
+if not metaxploit then
+	metaxploit = include_lib(current_path + "/metaxploit.so")
+end if
+if not metaxploit then 
+	ui.error("Error: Can't find metaxploit library in the /lib path or the current folder")
+	exit()
+end if
+print("Listening for upcoming connections...")
+
+helpStr = ui.color("Usage: irshell [-c|--clear <will try to clear system.log instead of session>] [-k|--kill (pname|pid|pname_part|pid_part <it will search and kill all entries wich contains this token in show_proc string>)]", "info")
+
+args = ArgParser.parse(params)
+
+ui.setLogLevel(args.get("--level", "info"))
+
+if args.has("-h") or args.has("--help") then exit(helpStr)
+	
+shells = []
+while shells.len == 0	
+	key = poll_input
+	if key == "q" then 
+		ui.warn("process was interrupted by user")
+		exit()
+	end if
+	shells = metaxploit.rshell_server
+	if(typeof(shells) == "string") then exit(shells)	
+	if(shells.len == 0) then wait(2)
+end while
+
+option = 0
+while typeof(option) != "number" or (option < 1 or option > shells.len)
+	print(shells.len + " shell(s) connected!\n<b>Select a shell to start a terminal:</b>")
+	for i in range(0, shells.len - 1)
+		print("\n<b>Shell (" + (i + 1) + ")</b>\nPublic IP: " + shells[i].host_computer.public_ip + "\nLocal IP: " + shells[i].host_computer.local_ip)
+	end for
+	print("-----------")
+	option = user_input("Select shell>").to_int
+end while
+print("Starting shell #" + option)
+currentShell = shells[option - 1]
+
+do_a_session = true
+
+if args.has("-c") or args.has("--clear") then
+	do_a_session = false
+	currentComp = currentShell.host_computer
+	rootFolder = currentComp.File("/")
+	if not rootFolder then 
+		ui.error("there is no freakin root ('/') folder, emergency exit!")
+		exit()
+	end if
+	isRootRights = rootFolder.has_permission("w")
+	if not isRootRights then
+		ui.error("no root permissions, emergency exit!")
+		exit()
+	end if
+
+	blankPath = "/var/system_.log"
+	ui.debug(currentComp.touch("/var", "system_.log"))
+	blankLog = currentComp.File(blankPath)
+
+	ui.debug(blankLog)
+	ui.debug(blankLog.move("/var", "system.log"))
+	checkupFile = currentComp.File("/var/system.log")
+	checkupFile.set_content("here was I and my friend: I")
+	ui.debug(checkupFile.get_content())
+	ui.success("log successfully was blanked")
+end if
+
+spid = args.get("-k", args.get("--kill", null))
+if spid != null then
+	do_a_session = false
+	//root 3044 0.0% 0.0% myprogram
+	procs = currentComp.show_procs().split(char(10))[1:]
+	for proc in procs
+		columns = proc.split(" ")
+		user = columns[0]
+		pid = columns[1].val
+		cpu = columns[2]
+		mem = columns[3]
+		title = columns[4]
+		if proc.indexOf(spid) != null then
+			result = currentComp.close_program(pid)
+			outresultstr = ""
+			if result isa number then
+				if result then 
+					outresultstr = ui.color("true", "success")
+				else 
+					outresultstr = ui.color("false", "danger")
+				end if
+			else if result isa string then
+				outresultstr = result
+			else if result == null then
+				outresultstr = ui.color("failed", "danger")
+			else
+				outresultstr = ui.color(ui.bold("pretty shure it was successfully"), "accent")
+			end if
+			ui.info("killing " + pid + " " + title + " " + outresultstr)
+		end if
+	end for
+end if
+
+if not do_a_session then
+	ui.info("session terminated")
+	exit()
+end if
+currentShell.start_terminal

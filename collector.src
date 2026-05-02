@@ -1,7 +1,6 @@
 //collector.src
 Collector = {}
 Collector.init = function(ex, addr, zone)
-    if vuln == null then return null
     if ex.targetLib == null then return null
     if ex.lib == null then return null
     self = new Collector
@@ -11,7 +10,7 @@ Collector.init = function(ex, addr, zone)
     return self
 end function
 
-Collector.getIpList = function(node)
+Collector.getIpList = function(self, node)
     iplist = []
     if node == null then return []
     if not node.hasIndex("ip") then return []
@@ -25,22 +24,22 @@ Collector.getIpList = function(node)
     return iplist
 end function
 
-Collector.scanRouter = function(router)
+Collector.scanRouter = function(self, router)
     ui.info("scanning network")
     rootNode = NetUtils.scanNetwork(router)
     self.ips = self.getIpList(rootNode)
     ui.info("found " + self.ips.len + " ips")
 end function
 
-Collector.collect = function()
+Collector.collect = function(self)
     self.infos = []
-    for ip in ips
+    for ip in self.ips
         usersinfo = {}
         usersinfo.ip = ip
-        ui.debug("overflowing on addr " + addr + " with zone " + zone)
-        comp = ex.attack(addr, zone, ip)
+        ui.debug("overflowing on addr " + self.addr + " with zone " + self.zone)
+        comp = ex.attack(self.addr, self.zone, ip)
         if comp == null then 
-            ui.error("overflow = null " + [addr, zone, ip].join(" "))
+            ui.error("overflow = null " + [self.addr, self.zone, ip].join(" "))
             continue
         else if comp isa string then 
             ui.error("error: " + comp)
@@ -63,8 +62,19 @@ Collector.collect = function()
             usersinfo.passwd = null
         end if
         usersinfo.users = []
+        if passentries != null then
+            ui.debug("looking for root in " + passentries)
+            for entry in passentries
+                if entry.indexOf("root") == 0 then
+                    user = {"login": "root", "pass":entry.split(":")[1]}
+                    ui.debug("found root user: " + user)
+                    usersinfo.users.push(user)
+                    break
+                end if
+            end for
+        end if
         for folder in homefolders
-            user = {"login": "no_user", "pass": "no_pass","mail": "no_mail", "bank": "no_bank"}
+            user = {"login": "no_user", "pass": "no_pass"}
             user.login = folder.name
             if user.login == "guest" then continue
             mail = comp.File("/home/" + user.login + "/Config/Mail.txt")
@@ -79,26 +89,33 @@ Collector.collect = function()
                     end if
                 end for
             end if
+            ui.debug("found user: " + user)
             usersinfo.users.push(user)
         end for
+        ui.debug("found users info: " + usersinfo)
         self.infos.push(usersinfo)
     end for
 end function
 
-Collector.toText = function()
+Collector.toText = function(self)
+    ui.debug("converting to text: " + self.infos) 
     result = ""
     for info in self.infos
         result = result + info.ip + ":" + char(10)
         for user in info.users
             result = result + "    " + user.login + ":" + user.pass + char(10)
-            result = ui.color(result + "        " + user.mail + char(10), "accent")
-            result = ui.color(result + "        " + user.bank + char(10), "accent")
+            if user.hasIndex("mail") then
+                result = ui.color(result + "        " + user.mail, "accent") + char(10)
+            end if
+            if user.hasIndex("bank") then
+                result = ui.color(result + "        " + user.bank, "accent") + char(10)
+            end if
         end for
     end for
     return result
 end function
 
-Collector.toFile = function(filePath)
+Collector.toFile = function(self, filePath)
     if filePath == null then return null
     if filePath == "" then return null
     path = get_abs_path(filePath)
@@ -122,7 +139,7 @@ Collector.toFile = function(filePath)
         ui.error(file)
         return null
     end if
-    file.set_content(self.toText())
+    file.set_content(ui.stripTags(self.toText()))
     return path
 end function
 

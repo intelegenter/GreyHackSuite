@@ -37,7 +37,7 @@
         for key in self.meta.indexes
             member = self.meta[key]
             signature = (@member).signature
-            ui.debug("method: " + signature)
+            ui.debug("method: " + key + ":" + signature)
             args = (@member).arglist
             ui.debug("find args: " + args)
             Listops.removeEntries(args, "")
@@ -304,9 +304,9 @@
                     ui.debug("set shell")
                     args[i] = get_shell
                     continue
-                else if var == router then
+                else if var == "router" then
                     ui.debug("set router")
-                    args[i] = get_router
+                    args[i] = get_router()
                     continue
                 end if
                 if self.vars.hasIndex(var) then
@@ -335,8 +335,10 @@
     Meta.menu = function()
         options = []
         for i in self.methods.indexes
-            option = {}
-            option.text = i + "(" + self.args[i].join(", ") + ")"
+            option = {}            
+            args = [] + self.args[i]
+            Listops.removeEntries(args, "self")
+            option.text = i + "(" + args.join(", ") + ")"
             option.value = i
             option.key = i
             options.push(option)
@@ -412,7 +414,13 @@
             end if
             if newObject isa list and newObject.len > 0 then
                 ui.debug("multiple select")
-                newObject = ui.select("select object", newObject)
+                options = []
+                for entry in newObject
+                    opt = {"text": entry, "value": entry}
+                    options.push(opt)
+                end for
+                opt = ui.select("select object", options)
+                newObject = opt.value
                 if newObject isa map and not newObject.hasIndex("__isa") and newObject.hasIndex("value") then
                     newObject = newObject.value
                 end if
