@@ -399,6 +399,34 @@
         return object isa map and object.hasIndex("__isa")
     end function
 
+    Meta.extractTitle = function(entry)
+        text = ""
+        ui.debug("extracting title from entry: " + entry)
+        if not entry isa map or not entry.hasIndex("classID") then
+            ui.debug("nothing to extract, it's not a class")
+            text = entry
+            return text
+        end if
+        if entry.classID == "file" then 
+            text = entry.name()
+        else if entry.classID == "computer" then 
+            text = entry.get_name()
+        else if entry.classID == "metalib" then
+            text = entry.lib_name()
+        else if entry.classID == "port" then
+            text = entry.port_number()
+        else if entry.classID == "router" then
+            text = entry.public_ip()
+        else if entry.classID == "shell" then
+            comp = entry.host_computer()
+            text = comp.get_name + ":" + comp.public_ip + ":" comp.local_ip
+        else
+            text = entry
+        end if
+        ui.debug("title = " + text)
+        return text
+    end function
+
     Meta.startMenu = function(object)
         ui.debug("got metaobject for menu: " + object + " initializing")
         meta = Meta.init(object)
@@ -416,7 +444,7 @@
                 ui.debug("multiple select")
                 options = []
                 for entry in newObject
-                    opt = {"text": entry, "value": entry}
+                    opt = {"text": self.extractTitle(entry), "value": entry}
                     options.push(opt)
                 end for
                 opt = ui.select("select object", options)

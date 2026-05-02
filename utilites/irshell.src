@@ -71,9 +71,9 @@ if args.has("-c") or args.has("--clear") then
 	ui.success("log successfully was blanked")
 end if
 
-spid = args.get("-k", args.get("--kill", null))
-
 killProc = function(processToken)
+	currentComp = currentShell.host_computer
+	ui.info("killing procs with " + processToken)
 	if processToken == null then 
 		ui.warn("no token provided for kill - no kill")
 		return
@@ -87,7 +87,7 @@ killProc = function(processToken)
 			cpu = columns[2]
 			mem = columns[3]
 			title = columns[4]
-			if proc.indexOf(spid) != null then
+			if proc.indexOf(processToken) != null then
 				result = currentComp.close_program(pid)
 				outresultstr = ""
 				if result isa number then
@@ -108,8 +108,7 @@ killProc = function(processToken)
 		end for
 end function
 
-// rootpass = args.get("-u", args.get("--upgrade", null))
-// if rootpass == null then
+spid = args.get("-k", args.get("--kill", null))
 if spid != null then
 	do_a_session = false
 	killProc(spid)
