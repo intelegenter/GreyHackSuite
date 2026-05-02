@@ -98,6 +98,10 @@ Collector.collect = function(self)
 end function
 
 Collector.toText = function(self)
+    if not self.hasIndex("infos") then
+        ui.warn("no collection was collected, try to call collect() first")
+        return null
+    end if
     ui.debug("converting to text: " + self.infos) 
     result = ""
     for info in self.infos
@@ -116,6 +120,10 @@ Collector.toText = function(self)
 end function
 
 Collector.toFile = function(self, filePath)
+    if not self.hasIndex("infos") then
+        ui.warn("no collection was collected, try to call collect() first")
+        return null
+    end if
     if filePath == null then return null
     if filePath == "" then return null
     path = get_abs_path(filePath)
@@ -137,6 +145,11 @@ Collector.toFile = function(self, filePath)
         return null
     else if file isa string then
         ui.error(file)
+        return null
+    end if
+    text = self.toText()
+    if text == null then
+        ui.error("no text to save in file")
         return null
     end if
     file.set_content(ui.stripTags(self.toText()))

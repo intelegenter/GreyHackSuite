@@ -6,6 +6,31 @@ import_code("../collector.src")
 import_code("../netutils.src")
 import_code("../listops.src")
 
+paths = ["/bin", "/hack"]
+
+getToolPath = function(name, computer)
+	ui.debug("getting tool path in " + paths) 
+	if name == null or name == "" or computer == null then return null
+	for path in paths
+		folder = computer.File(path)
+		ui.debug("searching in " + path) 
+		files = folder.get_files
+		nameGetter = function(file)
+			return file.name
+		end function;
+		names = Listops.transform(files, @nameGetter)
+		ui.debug("it contains: " + names)
+		if names.indexOf(name) != null then 
+			ui.debug("tool found: " + path + "/" + name)
+			return path + "/" + name
+		else
+			ui.debug("tool " + name + " wasn't found in " + path)
+		end if
+	end for
+	ui.debug("tool " + name + "wasn't found at all")
+	return null
+end function
+
 ex = null
 args = ArgParser.parse(params)
 
@@ -87,14 +112,12 @@ else
 	getLocalDump()
 end if
 
-vulns = []
-remote_str = args.get("--remote", null)
-if remote_str != null then
+executeRemotely = function(remote_str)
 	arr = remote_str.split("@")
 	ui.debug("--remote arguments array: " + arr)
 	if arr.len < 3 then
 		ui.error("--remote usage: --remote user@pass@ip[@port=22@service=ssh]")
-		exit()
+		return null
 	end if
 	user = arr[0]
 	pass = arr[1]
@@ -110,16 +133,23 @@ if remote_str != null then
 	shell = get_shell.connect_service(ip, port, user, pass, service)
 	if shell == null then 
 		ui.error("can't connect to remote shell")
+		return null
 	else if shell isa string then
 		ui.error(shell)
+		return null
 	else
-		shell.launch("/bin/ex", "--remote-called --level " + logLevel)
+		toolPath = getToolPath("ex", shell.host_computer)
+		if toolPath == null then
+			ui.error("cant find tool ex on remote macnine")
+			return null
+		end if
+		shell.launch(toolPath, "--remote-called --level " + logLevel)
 		obj = get_custom_object
 		if obj.hasIndex("vulns") then
-			vulns = obj.vulns
+			return obj.vulns
 		end if
 	end if
-end if
+end function
 
 justPerform = function(addr, zone, args)
 	result = ex.attack(addr, zone, args.get("-args", ""))
@@ -163,6 +193,13 @@ justPerform = function(addr, zone, args)
 	end if
 end function
 
+vulns = []
+remote_str = args.get("--remote", null)
+if remote_str != null then
+	remoteVulns = executeRemotely(remote_str)
+	if remoteVulns != null then vulns = remoteVulns
+end if
+
 addr = args.get("-a", null)
 zone = args.get("-z", null)
 if addr and zone then
@@ -171,17 +208,29 @@ end if
 
 createOrToucn = function(dirpath, filename)
 	file = get_shell.host_computer.File(dirpath + "/" + filename)
-	if file == null then get_shell.host_computer.touch(dirpath, filename)
+	if file == null then 
+		ui.debug(get_shell.host_computer.touch(dirpath, filename))
+	end if
 	file = get_shell.host_computer.File(dirpath + "/" + filename)
 	return file
 end function
 
 saveScan = function(dirpath, libname, libver, scanResult)
-	if dirpath == null or not dirpath isa string or dirpath.len == 0 then dirpath = get_abs_path("~") + "/scans"
-	if get_shell.host_computer.File(dirpath) == null then get_shell.host_computer.create_folder(dirpath)
-	file = createOrToucn(dirpath, libname + "_" + libver + ".scan")
+	filename = libname + "_" + libver + ".scan"
+	if dirpath == null or not dirpath isa string or dirpath.len == 0 then 
+		dirpath = get_abs_path("~") + "/scans"
+	end if
+	if get_shell.host_computer.File(dirpath) == null then 
+		ui.debug("no 'scans' directory, create one...")
+		ui.debug(get_shell.host_computer.create_folder(parent_path(dirpath), dirpath.split("/")[-1]))
+		if get_shell.host_computer.File(dirpath) == null then
+			ui.error("can't create 'scan' directory in " + dirpath)
+			return
+		end if
+	end if
+	file = createOrToucn(dirpath, filename)
 	if file == null then
-		ui.error("cant open or create scan file to save results " + dirpath + "/" + libname + "_" + libver + ".scan")
+		ui.error("cant open or create scan file to save results " + dirpath + "/" + filename + " on " + " on " + get_shell.host_computer.public_ip)
 		return
 	end if
 	content = ""
@@ -189,6 +238,7 @@ saveScan = function(dirpath, libname, libver, scanResult)
 		content = content + sr.addr + " " + sr.scanstr + char(10)
 	end for
 	file.set_content(content)
+	ui.success("scan saved in " + dirpath + "/" + filename + " on " + get_shell.host_computer.public_ip)
 end function
 
 loadScan = function(dirpath, libname, libver)
@@ -233,6 +283,15 @@ log_path = args.get("-l", null)
 if log_path == null then log_path = args.get("--log", null)
 
 if vulns.len == 0 then
+	if ex.targetLib == null then
+		if ex.targetLib isa string then 
+			ui.error("Target library error: " + ex.targetLib)
+			exit()
+		else
+			ui.error("Target library is " + ui.bold("NULL"))
+			exit()
+		end if
+	end if
 	scanResult = loadScan(null, ex.targetLib.lib_name, ex.targetLib.version)
 	if scanResult == null then 
 		vs = ex.getVulnerabilities()

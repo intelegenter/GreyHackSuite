@@ -11,7 +11,7 @@ if not metaxploit then
 end if
 print("Listening for upcoming connections...")
 
-helpStr = ui.color("Usage: irshell [-c|--clear <will try to clear system.log instead of session>] [-k|--kill (pname|pid|pname_part|pid_part <it will search and kill all entries wich contains this token in show_proc string>)]", "info")
+helpStr = ui.color("Usage: irshell [-c|--clear <will try to clear system.log instead of session>] [-k|--kill (pname|pid|pname_part|pid_part <it will search and kill all entries wich contains this token in show_proc string>)]\n [-u|-upgrade rootpassword]", "info")
 
 args = ArgParser.parse(params)
 
@@ -72,36 +72,76 @@ if args.has("-c") or args.has("--clear") then
 end if
 
 spid = args.get("-k", args.get("--kill", null))
+
+killProc = function(processToken)
+	if processToken == null then 
+		ui.warn("no token provided for kill - no kill")
+		return
+	end if
+		//root 3044 0.0% 0.0% myprogram
+		procs = currentComp.show_procs().split(char(10))[1:]
+		for proc in procs
+			columns = proc.split(" ")
+			user = columns[0]
+			pid = columns[1].val
+			cpu = columns[2]
+			mem = columns[3]
+			title = columns[4]
+			if proc.indexOf(spid) != null then
+				result = currentComp.close_program(pid)
+				outresultstr = ""
+				if result isa number then
+					if result then 
+						outresultstr = ui.color("true", "success")
+					else 
+						outresultstr = ui.color("false", "danger")
+					end if
+				else if result isa string then
+					outresultstr = result
+				else if result == null then
+					outresultstr = ui.color("failed", "danger")
+				else
+					outresultstr = ui.color(ui.bold("pretty shure it was successfully"), "accent")
+				end if
+				ui.info("killing " + pid + " " + title + " " + outresultstr)
+			end if
+		end for
+end function
+
+// rootpass = args.get("-u", args.get("--upgrade", null))
+// if rootpass == null then
 if spid != null then
 	do_a_session = false
-	//root 3044 0.0% 0.0% myprogram
-	procs = currentComp.show_procs().split(char(10))[1:]
-	for proc in procs
-		columns = proc.split(" ")
-		user = columns[0]
-		pid = columns[1].val
-		cpu = columns[2]
-		mem = columns[3]
-		title = columns[4]
-		if proc.indexOf(spid) != null then
-			result = currentComp.close_program(pid)
-			outresultstr = ""
-			if result isa number then
-				if result then 
-					outresultstr = ui.color("true", "success")
-				else 
-					outresultstr = ui.color("false", "danger")
-				end if
-			else if result isa string then
-				outresultstr = result
-			else if result == null then
-				outresultstr = ui.color("failed", "danger")
-			else
-				outresultstr = ui.color(ui.bold("pretty shure it was successfully"), "accent")
-			end if
-			ui.info("killing " + pid + " " + title + " " + outresultstr)
+	killProc(spid)
+end if
+
+// if spid != null and rootpass != null then
+if args.has("-u") or args.has("--upgrade") then
+	title = args.get("-t", args.get("--title", "rshell_client"))
+	do_a_session = false
+	homedir = currentShell.host_computer.File("/home")
+	homepath = "/home/guest"
+	user = "guest"
+	for folder in homedir.get_folders()
+		if folder.has_permission("w") and folder.name != "guest" then 
+			homepath = folder.path
+			user = folder.name
+			break
 		end if
 	end for
+	ui.debug(currentShell.launch("/bin/scp", "-u /lib/metaxploit.so " + homepath))
+	ui.debug(currentShell.launch("/bin/scp", "-u /hack/rshell " + homepath))
+	sudoArgs = homepath + "/rshell " + get_shell.host_computer.public_ip + " " + title + " --level debug"
+	ui.debug("trying " + ui.color("sudo " + sudoArgs, "accent"))
+	ui.debug(currentShell.launch("/bin/sudo", sudoArgs))
+	ui.debug(currentShell.host_computer.touch(homepath, "blank.txt"))
+	blankFile = currentShell.host_computer.File(homepath + "/blank.txt")
+	ui.debug(blankFile.move(homepath, "metaxploit.so"))
+	ui.debug(blankFile.move(homepath, "rshell"))
+	//ui.debug(blankFile.move(homepath, "ex"))
+	ui.debug(blankFile.move(homepath, "blank.txt"))
+	// ui.debug(blankFile.move(homepath + "/.Trash", "blank.txt"))
+
 end if
 
 if not do_a_session then

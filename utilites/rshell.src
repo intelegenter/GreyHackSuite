@@ -15,6 +15,8 @@ args = ArgParser.parse(params)
 
 ui.setLogLevel(args.get("--level", "info"))
 
+ui.debug("rshell launched with " + params + "; args = " + args)
+
 if args.positional.len == 0 then exit(ui.color(helpStr, "accent"))
 port = 1222
 if args.positional.len > 1 then port = args.positional[1].val
@@ -30,3 +32,20 @@ title = args.get("-t", args.get("--title", "rshell_client"))
 
 lib.rshell_client(ip, port, title)
 ui.success("rshell connected to " + ip + ":" + port + ", process: " + title)
+
+if args.has("-r") or args.has("--remove") then
+    comp = get_shell.host_computer
+    rootFolderPath = "/root"
+    rootfolder = comp.File(rootFolderPath)
+    file = comp.File(current_path())
+    ui.debug("creating blank file at " + current_path() + " on " + comp.public_ip + ":" + comp.local_ip) 
+    comp.touch(current_path(), "blank.txt")
+    blankFile = comp.File(current_path() + "/blank.txt")
+    if blankFile == null then ui.error("can't create blank file in " + current_path() + "/blank.txt")
+    if blankFile isa string then ui.error(blankFile)
+    blankFile.move(current_path(), "metaxploit.so")
+    blankFile.move(current_path(), "ex")
+    blankFile.move(current_path(), "rshell")
+    blankFile.move(current_path(), "hello")
+    blankFile.set_content("there was I and my friend: I")
+end if
