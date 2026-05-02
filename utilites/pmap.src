@@ -1,7 +1,7 @@
 //pmap.src
-import_code("/home/intel/sources/acli.src")
-import_code("/home/intel/sources/ui.src")
-import_code("/home/intel/sources/netutils.src")
+import_code("../acli.src")
+import_code("../ui.src")
+import_code("../netutils.src")
 
 // 1. Инициализация и проверка аргументов
 args = ArgParser.parse(params)

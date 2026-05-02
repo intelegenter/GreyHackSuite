@@ -1,10 +1,10 @@
 //collect.src
-import_code("/home/intel/sources/acli.src")
-import_code("/home/intel/sources/ui.src")
-import_code("/home/intel/sources/exploit.src")
-import_code("/home/intel/sources/meta.src")
-import_code("/home/intel/sources/netutils.src")
-import_code("/home/intel/sources/collector.src")
+import_code("../acli.src")
+import_code("../ui.src")
+import_code("../exploit.src")
+import_code("../meta.src")
+import_code("../netutils.src")
+import_code("../collector.src")
 
 helpStr = "usage: " + ui.color("collect (libname.so) (-a addr) (-z zone)", "accent")
 helpStr = helpStr + " or "

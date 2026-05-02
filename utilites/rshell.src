@@ -1,6 +1,6 @@
 //rshell.src
-import_code("/home/intel/sources/acli.src")
-import_code("/home/intel/sources/ui.src")
+import_code("../acli.src")
+import_code("../ui.src")
 
 helpStr = "Usage: rshell ip_adress port=1222 [-t|--title (process_title)]"
 

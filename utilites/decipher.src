@@ -1,5 +1,5 @@
-import_code("/home/intel/sources/acli.src")
-import_code("/home/intel/sources/ui.src")
+import_code("../acli.src")
+import_code("../ui.src")
 cryptools = include_lib("/lib/crypto.so")
 if not cryptools then exit(ui.color("Error: Missing crypto library", "danger"))
 

@@ -1,5 +1,5 @@
 //cpl.src - clear proxy logs
-//import_code("/home/intel/sources/acli.src")
+//import_code("../acli.src")
 user = "root"
 pass = "fart"
 ip = "201.148.195.4"

@@ -1,6 +1,6 @@
 //irshell.src
-import_code("/home/intel/sources/acli.src")
-import_code("/home/intel/sources/ui.src")
+import_code("../acli.src")
+import_code("../ui.src")
 metaxploit = include_lib("/lib/metaxploit.so")
 if not metaxploit then
 	metaxploit = include_lib(current_path + "/metaxploit.so")

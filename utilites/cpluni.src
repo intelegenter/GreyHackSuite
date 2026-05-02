@@ -1,5 +1,5 @@
 //cpl.src - clear proxy logs
-import_code("/home/intel/sources/acli.src")
+import_code("../acli.src")
 args = ArgParser.parse(params)
 if args.positional.len < 4 then exit("cpl user@pass ipaddr [service = ssh] [port = 22]")
 creds = arg.positional[0].split("@")
