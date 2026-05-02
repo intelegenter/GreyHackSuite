@@ -87,6 +87,7 @@ else
 	getLocalDump()
 end if
 
+vulns = []
 remote_str = args.get("--remote", null)
 if remote_str != null then
 	arr = remote_str.split("@")
@@ -105,20 +106,22 @@ if remote_str != null then
 	ui.info("connecting to remote exploiter: " + [user,pass,ip,port,service].join(" "))
 	obj = get_custom_object
 	obj.targetLib = ex.targetLib
+	obj.logLevel = logLevel
 	shell = get_shell.connect_service(ip, port, user, pass, service)
 	if shell == null then 
 		ui.error("can't connect to remote shell")
 	else if shell isa string then
 		ui.error(shell)
 	else
-		exit(shell.launch("/bin/ex", "--remote-called --level " + logLevel))
+		shell.launch("/bin/ex", "--remote-called --level " + logLevel)
+		obj = get_custom_object
+		if obj.hasIndex("vulns") then
+			vulns = obj.vulns
+		end if
 	end if
 end if
 
-
-addr = args.get("-a", null)
-zone = args.get("-z", null)
-if addr and zone then
+justPerform = function(addr, zone, args)
 	result = ex.attack(addr, zone, args.get("-args", ""))
 	if result == null then
 		ui.warn("attack has null result")
@@ -158,6 +161,12 @@ if addr and zone then
 		Meta.startMenu(result)
 		exit()
 	end if
+end function
+
+addr = args.get("-a", null)
+zone = args.get("-z", null)
+if addr and zone then
+	justPerform(addr, zone, args.get("-args", ""))
 end if
 
 createOrToucn = function(dirpath, filename)
@@ -219,43 +228,49 @@ loadScan = function(dirpath, libname, libver)
 	return scanResult
 end function
 
-
-
-scanResult = loadScan(null, ex.targetLib.lib_name, ex.targetLib.version)
-if scanResult == null then 
-	vs = ex.getVulnerabilities()
-	if vs == null then
-		ui.warn("no vulnerabilities found")
-		exit()
-	end if
-	scanResult = ex.scanVulnerabilities(vs)
-	saveScan(null, ex.targetLib.lib_name, ex.targetLib.version, scanResult)
-end if
-
-vulns = []
-i = 1
-for sr in scanResult
-	varr = ex.parseScan(sr.scanstr)
-	ui.debug("parseScan: " + varr)
-	for v in varr
-		vuln = v
-		vuln["addr"] = sr.addr
-		vuln["num"] = i
-		i = i + 1
-		vulns.push(vuln)
-	end for
-end for
-ui.debug("vulns: " + vulns)
-headers = ["#", "ADDR", "ZONE", "STATUS", "CONDITIONS"]
-keys = ["num", "addr", "zone", "status"]
-//data = []
-
 log_enabled = args.has("-l") or args.has("--log")
 log_path = args.get("-l", null)
 if log_path == null then log_path = args.get("--log", null)
 
-if vulns == null or vulns == [] then
-	ui.error("error: can't find any vulnurability, try to update metaxploit.so")
+if vulns.len == 0 then
+	scanResult = loadScan(null, ex.targetLib.lib_name, ex.targetLib.version)
+	if scanResult == null then 
+		vs = ex.getVulnerabilities()
+		if vs == null then
+			ui.warn("no vulnerabilities found")
+			exit()
+		end if
+		scanResult = ex.scanVulnerabilities(vs)
+		saveScan(null, ex.targetLib.lib_name, ex.targetLib.version, scanResult)
+	end if
+
+	i = 1
+	for sr in scanResult
+		varr = ex.parseScan(sr.scanstr)
+		ui.debug("parseScan: " + varr)
+		for v in varr
+			vuln = v
+			vuln["addr"] = sr.addr
+			vuln["num"] = i
+			i = i + 1
+			vulns.push(vuln)
+		end for
+	end for
+	ui.debug("vulns: " + vulns)
+	headers = ["#", "ADDR", "ZONE", "STATUS", "CONDITIONS"]
+	keys = ["num", "addr", "zone", "status"]
+	//data = []
+
+	if vulns == null or vulns == [] then
+		ui.error("error: can't find any vulnurability, try to update metaxploit.so")
+		exit()
+	end if
+end if
+
+if args.has("--remote-called") then
+	customObject = get_custom_object
+	customObject.vulns = vulns
+	ui.warn("returning to local with results")
 	exit()
 end if
 
@@ -326,6 +341,13 @@ while true
 				router = get_router(ex.targetIp)
 			else
 				router = get_router()
+			end if
+			if router == null then
+				ui.error("no valid router object")
+				continue
+			else if router isa string then
+				ui.error("Router missing error: " + router)
+				continue
 			end if
 			ui.debug("scanning root router of " + router.public_ip()) 
 			collector.scanRouter(router)
