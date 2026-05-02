@@ -34,7 +34,7 @@ lib.rshell_client(ip, port, title)
 ui.success("rshell connected to " + ip + ":" + port + ", process: " + title)
 
 if args.has("-r") or args.has("--remove") then
-    comp = get_shell.host_computer
+    comp = get_shell.host_computer()
     rootFolderPath = "/root"
     rootfolder = comp.File(rootFolderPath)
     file = comp.File(current_path())

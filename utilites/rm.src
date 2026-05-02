@@ -2,14 +2,16 @@
 if params.len < 1 or params.len > 2 or params[0] == "-h" or params[0] == "--help" then exit(command_info("rm_usage"))
 
 if params[0] == "*" then
-    currentFolder = get_shell.host_computer.File(current_path)
-    // folders = currentFolder.get_folders
+    currentFolder = get_shell.host_computer.File(current_path())
     files = currentFolder.get_files
-    // for folder in folders
-    //     folder.delete()
-    // end for
     for file in files
-        print(file.delete())
+        filename = file.name()
+        result = file.delete()
+        if result then
+            print(filename + " removed")
+        else
+            print("can't remove " + filename)
+        end if
     end for
     exit()
 end if

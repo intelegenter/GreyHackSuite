@@ -130,15 +130,16 @@ if args.has("-u") or args.has("--upgrade") then
 	end for
 	ui.debug(currentShell.launch("/bin/scp", "-u /lib/metaxploit.so " + homepath))
 	ui.debug(currentShell.launch("/bin/scp", "-u /hack/rshell " + homepath))
-	sudoArgs = homepath + "/rshell " + get_shell.host_computer.public_ip + " " + title + " --level debug"
-	ui.debug("trying " + ui.color("sudo " + sudoArgs, "accent"))
-	ui.debug(currentShell.launch("/bin/sudo", sudoArgs))
-	ui.debug(currentShell.host_computer.touch(homepath, "blank.txt"))
-	blankFile = currentShell.host_computer.File(homepath + "/blank.txt")
-	ui.debug(blankFile.move(homepath, "metaxploit.so"))
-	ui.debug(blankFile.move(homepath, "rshell"))
-	//ui.debug(blankFile.move(homepath, "ex"))
-	ui.debug(blankFile.move(homepath, "blank.txt"))
+	exit(currentShell.start_terminal)
+	// sudoArgs = homepath + "/rshell " + get_shell.host_computer.public_ip + " " + title + " --level debug"
+	// ui.debug("trying " + ui.color("sudo " + sudoArgs, "accent"))
+	// ui.debug(currentShell.launch("/bin/sudo", sudoArgs))
+	// ui.debug(currentShell.host_computer.touch(homepath, "blank.txt"))
+	// blankFile = currentShell.host_computer.File(homepath + "/blank.txt")
+	// ui.debug(blankFile.move(homepath, "metaxploit.so"))
+	// ui.debug(blankFile.move(homepath, "rshell"))
+	// //ui.debug(blankFile.move(homepath, "ex"))
+	// ui.debug(blankFile.move(homepath, "blank.txt"))
 	// ui.debug(blankFile.move(homepath + "/.Trash", "blank.txt"))
 
 end if
