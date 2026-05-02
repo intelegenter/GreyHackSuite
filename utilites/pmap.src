@@ -166,50 +166,14 @@ intFromIp = function(ip)
 	return a + b + c + d
 end function
 
-hasMatch = function(analyzed, expression, linesArr)
-	ui.debug(analyzed + " " + expression)
-	orExpr = expression.split("\|")
-	ui.debug("splitted by |: " + orExpr) 
-	andExpr = []
-	for ore in orExpr
-		if ore.indexOf("&") == null then continue
-		ande = ore.split("&")
-		for ae in ande
-			andExpr.push(ae)
-		end for
-	end for
-	ui.debug("'and' entries: " + andExpr)
-	if orExpr.len == 1 then orExpr = []
-	ui.debug("fixed or entries: " + orExpr)
-	matchOr = false
-	for ore in orExpr
-		if analyzed.indexOf(ore) != null then
-			ui.debug("found or pattern " + ore)
-			matchOr = true
-			break
-		end if
-	end for
-	matchAnd = andExpr.len > 0
-	for ande in andExpr
-		if analyzed.indexOf(ande) == null then
-			matchAnd = false
-			ui.debug("found and mismatch " + ande)
-			break
-		end if
-	end for
-	ui.debug(matchOr + " " + matchAnd)
-	return matchOr or matchAnd
-end function
-
-targetLib = args.get("-f", null)
-if targetLib == null then targetLib = args.get("--find", null)
-if targetLib != null then
-	if log_enabled and log_name.len == 0 then log_name = "scan_for_" + targetLib + ".txt"
-	ui.info("searching for lib '" + targetLib + "', press 'q' to stop")
+regex = args.get("-f", null)
+if regex == null then regex = args.get("--find", null)
+if regex != null then
+	if log_enabled and log_name.len == 0 then log_name = "scan_for_" + regex + ".txt"
+	ui.info("searching for lib '" + regex + "', press 'q' to stop")
 	dip = intFromIp(args.get("-ff", null))
 	if dip == null then dip = intFromIp(args.get("--findfrom", "1.1.1.1"))
 	counter = 0
-	targetLibList = targetLib.split("|")
 	while dip < 4294967295
 		key = poll_input
 		if key == "q" then break
@@ -228,7 +192,7 @@ if targetLib != null then
 		end for
 		ui.debug("port whole: " + portsWhole)
 		output = ip + ":" + portsWhole
-		if hasMatch(portsWhole, targetLib) then
+		if portsWhole.is_match(regex) then
 			ui.warn(output)
 			if log_name.len != 0 then ui.saveLog(log_name, output, true)
 		else	
