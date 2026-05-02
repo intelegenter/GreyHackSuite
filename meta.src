@@ -1,415 +1,430 @@
-//meta.src
+    //meta.src
 
-funcRef.signature = function
-   return str(@self)
-end function
-funcRef.arglist = function
-	sign = self.signature
-	openBracket = sign.indexOf("(")
-	closeBracket = sign.indexOf(")")
-	args = sign[openBracket + 1: closeBracket].split(", ")
-    Listops.removeEntries(args, "")
-	return args
-end function
-
-Meta = {}
-
-Meta.init = function(object)
-    ui.debug("meta init") 
-    if not object isa map then return null
-    if not object.hasIndex("__isa") then return null
-    ui.debug("scanning " + object)
-    self = new Meta
-	self.object = object
-    self.meta = object["__isa"]
-    // self.members = {}
-    self.methods = {}
-    self.args = {}
-    for key in self.meta.indexes
-        member = self.meta[key]
-        signature = (@member).signature
-        ui.debug("method: " + signature)
-        args = (@member).arglist
-        ui.debug("find args: " + args)
+    funcRef.signature = function
+    return str(@self)
+    end function
+    funcRef.arglist = function
+        sign = self.signature
+        openBracket = sign.indexOf("(")
+        closeBracket = sign.indexOf(")")
+        args = sign[openBracket + 1: closeBracket].split(", ")
         Listops.removeEntries(args, "")
-        ui.debug(args)
-        self.args[key] = args
-        self.methods[key] = @member
-    end for
-    if object.hasIndex("classID") and object.classID == "computer" then 
-        ui.debug("mocking computer " + object)
-        ui.debug("args = " + self.args)
-        self.compMock(object)
-    else if object.hasIndex("classID") and object.classID == "file" then 
-        ui.debug("mocking file " + object)
-        ui.debug("args = " + self.args)
-        self.fileMock(object)
-    end if
-    self.vars = {}
-    return self
-end function
+        return args
+    end function
+    funcRef.minArgs = function()
+        args = self.arglist
+        requiredCount = 0
+        for arg in args
+            if arg.indexOf("=") == null or arg.indexOf("self") != null then
+                requiredCount = requiredCount + 1
+            end if
+        end for
+        return requiredCount
+    end function
 
-Meta.scanFileTree = function(theFile)
-    ui.debug("start scanning file tree")
-    node = {}
-    node.text = theFile.name() + " "+ theFile.permissions()
-    node.children = []
-    if not theFile.is_folder() then 
+    Meta = {}
+
+    Meta.init = function(object)
+        ui.debug("meta init") 
+        if not object isa map then return null
+        if not object.hasIndex("__isa") then return null
+        ui.debug("scanning " + object)
+        self = new Meta
+        self.object = object
+        self.meta = object["__isa"]
+        self.methods = {}
+        self.args = {}
+        for key in self.meta.indexes
+            member = self.meta[key]
+            signature = (@member).signature
+            ui.debug("method: " + signature)
+            args = (@member).arglist
+            ui.debug("find args: " + args)
+            Listops.removeEntries(args, "")
+            ui.debug(args)
+            self.args[key] = args
+            self.methods[key] = @member
+        end for
+        if object.hasIndex("classID") and object.classID == "computer" then 
+            ui.debug("mocking computer " + object)
+            ui.debug("args = " + self.args)
+            self.compMock(object)
+        else if object.hasIndex("classID") and object.classID == "file" then 
+            ui.debug("mocking file " + object)
+            ui.debug("args = " + self.args)
+            self.fileMock(object)
+        end if
+        self.vars = {}
+        return self
+    end function
+
+    Meta.scanFileTree = function(theFile)
+        ui.debug("start scanning file tree")
+        node = {}
+        node.text = theFile.name() + " "+ theFile.permissions()
+        node.children = []
+        if not theFile.is_folder() then 
+            return node
+        end if
+
+        ui.debug("node text = " + node.text)
+        files = theFile.get_files()
+        for file in files
+            node.children.push(self.scanFileTree(file))
+        end for
+        folders = theFile.get_folders()
+        for folder in folders
+            node.children.push(self.scanFileTree(folder))
+        end for
         return node
-    end if
-
-    ui.debug("node text = " + node.text)
-    files = theFile.get_files()
-    for file in files
-        node.children.push(self.scanFileTree(file))
-    end for
-    folders = theFile.get_folders()
-    for folder in folders
-        node.children.push(self.scanFileTree(folder))
-    end for
-    return node
-end function
-
-Meta.checkFile = function(file)
-    if file == null then 
-        ui.error("file is null")
-        return null
-    else if file isa string then
-        ui.error(file)
-        return null
-    else if file.hasIndex("classID") and file.classID == "file" then
-        return file
-    else
-        ui.error(file + " is not a File")
-        return null
-    end if
-end function
-
-Meta.compMock = function(computer)
-    if computer.hasIndex("classId") and computer.classID != "computer" then return null
-    ui.debug("comp mocking function, args = " + self.args)
-    localSelf = self
-    self.args["tree"] = ["self"]
-    self.methods["tree"] = function(self)
-        theFile = self.File("/")
-        ui.debug("root file = " + theFile)
-        rootNode = localSelf.scanFileTree(theFile)
-        ui.debug("root node = " + rootNode)
-        tree = ui.treeText(rootNode)
-        print(tree)
     end function
-    self.args["mail"] = ["self", "username"]
-    self.methods["mail"] = function(self, username)
-        ui.debug("accessing file " + "/home/" + username + "/Config/Mail.txt")
-        theFile = self.File("/home/" + username + "/Config/Mail.txt")
-        return Meta.checkFile(theFile)
-    end function
-    self.args["bank"] = ["self", "username"]
-    self.methods["bank"] = function(self, username)
-        ui.debug("accessing file " + "/home/" + username + "/Config/Bank.txt")
-        theFile = self.File("/home/" + username + "/Config/Bank.txt")
-        return Meta.checkFile(theFile)
-    end function
-end function
 
-Meta.fileMock = function(file)
-    if file.hasIndex("classId") and file.classID != "file" then return null
-    ui.debug("file mocking function, args = " + self.args)
-    self.args["cd"] = ["self", "path=/"]
-    localSelf = self
-    self.methods["cd"] = function(self, Path = "/")
-        ui.debug("changing directory to " + Path)
-        if self == null then return null
-        if Path == null then return self
-        file = self
-        getRoot = function()
-            while file != null and file.name() != "/"
+    Meta.checkFile = function(file)
+        if file == null then 
+            ui.error("file is null")
+            return null
+        else if file isa string then
+            ui.error(file)
+            return null
+        else if file.hasIndex("classID") and file.classID == "file" then
+            return file
+        else
+            ui.error(file + " is not a File")
+            return null
+        end if
+    end function
+
+    Meta.compMock = function(computer)
+        if computer.hasIndex("classId") and computer.classID != "computer" then return null
+        ui.debug("comp mocking function, args = " + self.args)
+        localSelf = self
+        self.args["tree"] = ["self"]
+        self.methods["tree"] = function(self)
+            theFile = self.File("/")
+            ui.debug("root file = " + theFile)
+            rootNode = localSelf.scanFileTree(theFile)
+            ui.debug("root node = " + rootNode)
+            tree = ui.treeText(rootNode)
+            print(tree)
+        end function
+        self.args["mail"] = ["self", "username"]
+        self.methods["mail"] = function(self, username)
+            ui.debug("accessing file " + "/home/" + username + "/Config/Mail.txt")
+            theFile = self.File("/home/" + username + "/Config/Mail.txt")
+            return Meta.checkFile(theFile)
+        end function
+        self.args["bank"] = ["self", "username"]
+        self.methods["bank"] = function(self, username)
+            ui.debug("accessing file " + "/home/" + username + "/Config/Bank.txt")
+            theFile = self.File("/home/" + username + "/Config/Bank.txt")
+            return Meta.checkFile(theFile)
+        end function
+    end function
+
+    Meta.fileMock = function(file)
+        if file.hasIndex("classId") and file.classID != "file" then return null
+        ui.debug("file mocking function, args = " + self.args)
+        self.args["cd"] = ["self", "path=/"]
+        localSelf = self
+        self.methods["cd"] = function(self, Path = "/")
+            ui.debug("changing directory to " + Path)
+            if self == null then return null
+            if Path == null then return self
+            file = self
+            getRoot = function()
+                while file != null and file.name() != "/"
+                    file = file.parent
+                end while
+                if file == null then return null
+                return file
+            end function
+            if Path == "/" then
+            return getRoot()
+            else if Path == ".." then
+                return file.parent()
+            end if
+            if Path.len == 0 then return null
+            if Path[0] == "/" then 
+                file = getRoot()
+                Path = Path[1:]
+            else if Path.len > 1 and Path[0:1] == ".." then
                 file = file.parent
-            end while
-            if file == null then return null
+                Path = Path[2:]
+            end if
+            file = localSelf.getRelativeFile(file, Path)
             return file
         end function
-        if Path == "/" then
-           return getRoot()
-        else if Path == ".." then
-            return file.parent()
-        end if
-        if Path.len == 0 then return null
-        if Path[0] == "/" then 
-            file = getRoot()
-            Path = Path[1:]
-        else if Path.len > 1 and Path[0:1] == ".." then
-            file = file.parent
-            Path = Path[2:]
-        end if
-        file = localSelf.getRelativeFile(file, Path)
-        return file
+        self.args["mail"] = ["self", "username"]
+        self.methods["mail"] = function(self, username)
+            cdFunc = localSelf.methods["cd"]
+            file = cdFunc(self, "/home/" + username + "/Config/Mail.txt")
+            return Meta.checkFile(file)
+        end function
+        self.args["bank"] = ["self", "username"]
+        self.methods["bank"] = function(self, username)
+            cdFunc = localSelf.methods["cd"]
+            file = cdFunc(self, "/home/" + username + "/Config/Bank.txt")
+            return Meta.checkFile(file)
+        end function
     end function
-    self.args["mail"] = ["self", "username"]
-    self.methods["mail"] = function(self, username)
-        cdFunc = localSelf.methods["cd"]
-        file = cdFunc(self, "/home/" + username + "/Config/Mail.txt")
-        return Meta.checkFile(file)
-    end function
-    self.args["bank"] = ["self", "username"]
-    self.methods["bank"] = function(self, username)
-        cdFunc = localSelf.methods["cd"]
-        file = cdFunc(self, "/home/" + username + "/Config/Bank.txt")
-        return Meta.checkFile(file)
-    end function
-end function
 
-Meta.getRelativeFile = function(file, path)
-    ui.debug("file=" + file + "; path=" + path)
-    if file == null then 
-        ui.debug("file is null")
+    Meta.getRelativeFile = function(file, path)
+        ui.debug("file=" + file + "; path=" + path)
+        if file == null then 
+            ui.debug("file is null")
+            return null
+        end if
+        if path.len == 0 then 
+            ui.debug("path is null")
+            return file
+        end if
+        nextDots = path.indexOf("..")
+        if nextDots == 0 then
+            if path.len > 2 then 
+                path = path[2:]
+            else
+                path = ""
+            end if
+            if path.len == 1 and path[0] == "/" then path = ""
+            if path.len > 1 and path[0] == "/" then path = path[1:]
+            ui.debug("dots, levelup to " + path)
+            if file.parent() != null then
+                file = file.parent()
+            end if
+            return self.getRelativeFile(file, path)
+        end if
+        pathArr = path.split("/")
+        ui.debug("pathArr = " + pathArr)
+        next = pathArr[0]
+        ui.debug("next = " + next)
+        folders = file.get_folders
+        files = file.get_files
+        child = null
+        for folder in folders
+            if folder.name == next then
+                ui.debug("found folder " + folder.name)
+                child = folder
+                break
+            end if
+        end for
+        if child != null then
+            subpath = ""
+            if pathArr.len > 1 then subpath = pathArr[1:].join("/")
+            ui.debug("pathArr = " + pathArr +"; pathArr.len = " + pathArr.len + "; newPath = " + subpath)
+            ui.debug("dive deeper with child = " + child.name + " and subpath = " + subpath)
+            return self.getRelativeFile(child, subpath)
+        end if
+        for f in files
+            if f.name == next then
+                ui.debug("found file " + f.name)
+                child = f
+                break
+            end if
+        end for
+        
+        if child != null then
+            subpath = ""
+            if pathArr.len > 1 then subpath = pathArr[1:].join("/")
+            ui.debug("dive deeper with child = " + child.name + " and subpath = " + subpath)
+            return self.getRelativeFile(child, subpath)
+        end if
         return null
-    end if
-    if path.len == 0 then 
-        ui.debug("path is null")
-        return file
-    end if
-    nextDots = path.indexOf("..")
-    if nextDots == 0 then
-        if path.len > 2 then 
-            path = path[2:]
+    end function
+
+    Meta.print = function()
+        ui.debug("Methods:")
+        for m in self.methods.indexes
+            string = m + "(" + self.args[m].join(", ") + ")"
+            ui.debug(string)
+        end for
+    end function
+
+    Meta.exec = function(key, args = []) 
+        ui.debug("exec with args: " + args)
+        if not self.methods.hasIndex(key) then 
+            ui.warn("no command " + key)
+            return null
+        end if
+        func = self.methods[key]
+        ui.debug("signature: " + (@func).signature)
+        //clear empty args
+        ui.debug(args)
+        Listops.removeEntries(args, "")
+        ui.debug(args)
+        ui.debug("search self in " + (@func).signature)
+        if (@func).signature.indexOf("self") != null then
+            ui.debug("insert self object to args") 
+            args.insert(0, self.object)
+            ui.debug("args with self: " + args)
+        end if
+        ui.debug("self args[key] = " + self.args[key])
+        requiredArgs = (@func).minArgs
+        argsCount = args.len
+        ui.debug("provided args: " + args + "; required count = " + requiredArgs)
+        if argsCount < requiredArgs then
+            ui.error("arguments " + args + " is not enough for " + (@func).signature)
+            return null
+        end if
+        argc = args.len
+        if argc > self.args[key].len() then argc = self.args[key].len()
+        ui.debug("argc = " + argc)
+        ui.debug("call with args" + args)
+        if argc == 0 then 
+            ui.debug("call (0)")
+            return func()
+        else if argc == 1 then 
+            ui.debug("call (1)")
+            return func(args[0])
+        else if argc == 2 then 
+            ui.debug("call (2)")
+            return func(args[0], args[1])
+        else if argc == 3 then 
+            ui.debug("call (3)")
+            return func(args[0], args[1], args[2])
+        else if argc == 4 then 
+            ui.debug("call (4)")
+            return func(args[0], args[1], args[2], args[3])
+        else if argc == 5 then 
+            ui.debug("call (5)")
+            return func(args[0], args[1], args[2], args[3], args[4])
+        else if argc >= 6 then 
+            ui.debug("call (6)")
+            return func(args[0], args[1], args[2], args[3], args[4], args[5])
+        end if
+    end function
+
+    Meta.replaceArgs = function(args = [])
+        retval = null
+        if args.len == 0 then return
+        for i in range(0, args.len-1)
+            arg = args[i]
+            if arg.indexOf("@") == 0 then
+                var = arg.remove("@")
+                if var == "shell" then 
+                    ui.debug("set shell")
+                    args[i] = get_shell
+                    continue
+                else if var == router then
+                    ui.debug("set router")
+                    args[i] = get_router
+                    continue
+                end if
+                if self.vars.hasIndex(var) then
+                    ui.debug("set var " + self.var[var])
+                    args[i] = self.var[var]
+                    continue
+                end if
+                ui.debug("variable not found and will be setted to null")
+                args[i] = null
+            else if arg.indexOf("&") then
+                var = arg.remove("&")
+                ui.debug("set return value variable: " + var)
+                retval = var
+                args.remove(i)
+                i = i - 1
+                continue
+            end if
+            if arg == str(arg.val) then 
+                ui.debug("set number " + arg.val)
+                args[i] = arg.val
+                continue
+            end if
+        end for
+    end function
+
+    Meta.menu = function()
+        options = []
+        for i in self.methods.indexes
+            option = {}
+            option.text = i + "(" + self.args[i].join(", ") + ")"
+            option.value = i
+            option.key = i
+            options.push(option)
+        end for
+        option = ui.select("Pick function:", options)
+        opval = option.value
+
+        if opval == null then
+            return null
+        end if
+
+        argc = self.args[opval].len()
+
+        if (@self.methods[opval]).signature.indexOf("self") != null then argc = argc - 1
+        ui.info(option.text)
+        retval = null
+        if argc > 0 then
+            args = []
+            args = user_input("args: ", 0,0,1).trim().split(" ")
+            retvalkey = Meta.replaceArgs(args)
+            retval = self.exec(opval, args)
+            if retvalkey != null then self.vars[retvalkey] = retval
         else
-            path = ""
+            retval = self.exec(opval, [])
         end if
-        if path.len == 1 and path[0] == "/" then path = ""
-        if path.len > 1 and path[0] == "/" then path = path[1:]
-        ui.debug("dots, levelup to " + path)
-        if file.parent() != null then
-            file = file.parent()
+        if self.isClass(retval) or retval isa list and retval.len > 0 then
+            ui.info("retval: " + retval)
+            return retval
+        else
+            ui.info("(self)retval: " + retval)
         end if
-        return self.getRelativeFile(file, path)
-    end if
-    pathArr = path.split("/")
-    ui.debug("pathArr = " + pathArr)
-    next = pathArr[0]
-    ui.debug("next = " + next)
-    folders = file.get_folders
-    files = file.get_files
-    child = null
-    for folder in folders
-        if folder.name == next then
-            ui.debug("found folder " + folder.name)
-            child = folder
-            break
-        end if
-    end for
-    if child != null then
-        subpath = ""
-        if pathArr.len > 1 then subpath = pathArr[1:].join("/")
-        ui.debug("pathArr = " + pathArr +"; pathArr.len = " + pathArr.len + "; newPath = " + subpath)
-        ui.debug("dive deeper with child = " + child.name + " and subpath = " + subpath)
-        return self.getRelativeFile(child, subpath)
-    end if
-    for f in files
-        if f.name == next then
-            ui.debug("found file " + f.name)
-            child = f
-            break
-        end if
-    end for
-    
-    if child != null then
-        subpath = ""
-        if pathArr.len > 1 then subpath = pathArr[1:].join("/")
-        ui.debug("dive deeper with child = " + child.name + " and subpath = " + subpath)
-        return self.getRelativeFile(child, subpath)
-    end if
-    return null
-end function
+        return self
+    end function
 
-Meta.print = function()
-    ui.debug("Methods:")
-    for m in self.methods.indexes
-		string = m + "(" + self.args[m].join(", ") + ")"
-		ui.debug(string)
-    end for
-end function
+    MetaStack = {}
+    MetaStack.init = function(startObject)
+        self = new MetaStack
+        self.stack = []
+        self.push(startObject)
+        return self
+    end function
+    MetaStack.current = function()
+        if self.depth == 0 then return null
+        return self.stack[-1]
+    end function
+    MetaStack.push = function(object)
+        self.stack.push(Meta.init(object))
+    end function
+    MetaStack.pop = function()
+        if self.depth == 0 then return
+        self.stack.pop()
+    end function
+    MetaStack.depth = function()
+        return self.stack.len()
+    end function
 
-Meta.exec = function(key, args = []) 
-    ui.debug("exec with args: " + args)
-    if not self.methods.hasIndex(key) then 
-		ui.warn("no command " + key)
-		return null
-	end if
-	func = self.methods[key]
-    ui.debug("signature: " + (@func).signature)
-    //clear empty args
-    ui.debug(args)
-    Listops.removeEntries(args, "")
-    ui.debug(args)
-    ui.debug("search self in " + (@func).signature)
-    if (@func).signature.indexOf("self") != null then
-        ui.debug("insert self object to args") 
-        args.insert(0, self.object)
-        ui.debug("args with self: " + args)
-    end if
-    ui.debug("self args[key] = " + self.args[key])
-	argc = self.args[key].len()
-    ui.debug("argc = " + argc)
-    while args.len < argc
-        args.push(null)
-    end while
-	if argc == 0 then 
-        ui.debug("call (0)")
-		return func()
-	else if argc == 1 then 
-        ui.debug("call (1)")
-		return func(args[0])
-	else if argc == 2 then 
-        ui.debug("call (2)")
-		return func(args[0], args[1])
-	else if argc == 3 then 
-        ui.debug("call (3)")
-		return func(args[0], args[1], args[2])
-	else if argc == 4 then 
-        ui.debug("call (4)")
-		return func(args[0], args[1], args[2], args[3])
-	else if argc == 5 then 
-        ui.debug("call (5)")
-		return func(args[0], args[1], args[2], args[3], args[4])
-	else if argc >= 6 then 
-        ui.debug("call (6)")
-		return func(args[0], args[1], args[2], args[3], args[4], args[5])
-	end if
-end function
+    Meta.isClass = function(object)
+        return object isa map and object.hasIndex("__isa")
+    end function
 
-Meta.replaceArgs = function(args = [])
-    retval = null
-    if args.len == 0 then return
-    for i in range(0, args.len-1)
-        arg = args[i]
-        if arg.indexOf("@") == 0 then
-            var = arg.remove("@")
-            if var == "shell" then 
-                ui.debug("set shell")
-                args[i] = get_shell
-                continue
-            else if var == router then
-                ui.debug("set router")
-                args[i] = get_router
+    Meta.startMenu = function(object)
+        ui.debug("got metaobject for menu: " + object + " initializing")
+        meta = Meta.init(object)
+        meta.print()
+        objectsStack = MetaStack.init(object)
+        while true
+            current = objectsStack.current
+            if current == null then break
+            newObject = current.menu()
+            if newObject == null then
+                objectsStack.pop()
                 continue
             end if
-            if self.vars.hasIndex(var) then
-                ui.debug("set var " + self.var[var])
-                args[i] = self.var[var]
-                continue
+            if newObject isa list and newObject.len > 0 then
+                ui.debug("multiple select")
+                newObject = ui.select("select object", newObject)
+                if newObject isa map and not newObject.hasIndex("__isa") and newObject.hasIndex("value") then
+                    newObject = newObject.value
+                end if
+                if newObject == null or not self.isClass(newObject) then
+                    newObject = objectsStack.current
+                end if
             end if
-            ui.debug("variable not found and will be setted to null")
-            args[i] = null
-        else if arg.indexOf("&") then
-            var = arg.remove("&")
-            ui.debug("set return value variable: " + var)
-            retval = var
-            args.remove(i)
-            i = i - 1
-            continue
-        end if
-        if arg == str(arg.val) then 
-            ui.debug("set number " + arg.val)
-            args[i] = arg.val
-            continue
-        end if
-    end for
-end function
-
-Meta.menu = function()
-    options = []
-    for i in self.methods.indexes
-        option = {}
-        option.text = i + "(" + self.args[i].join(", ") + ")"
-		option.value = i
-        option.key = i
-        options.push(option)
-    end for
-    option = ui.select("Pick function:", options)
-	opval = option.value
-
-    if opval == null then
-        return null
-    end if
-
-	argc = self.args[opval].len()
-
-    if (@self.methods[opval]).signature.indexOf("self") != null then argc = argc - 1
-	ui.info(option.text)
-    retval = null
-	if argc > 0 then
-	    args = []
-	    args = user_input("args: ", 0,0,1).trim().split(" ")
-        retvalkey = Meta.replaceArgs(args)
-		retval = self.exec(opval, args)
-        if retvalkey != null then self.vars[retvalkey] = retval
-	else
-		retval = self.exec(opval, [])
-	end if
-    if self.isClass(retval) or retval isa list and retval.len > 0 then
-        ui.info("retval: " + retval)
-        return retval
-    else
-        ui.info("(self)retval: " + retval)
-    end if
-    return self
-end function
-
-MetaStack = {}
-MetaStack.init = function(startObject)
-    self = new MetaStack
-    self.stack = []
-    self.push(startObject)
-    return self
-end function
-MetaStack.current = function()
-    if self.depth == 0 then return null
-    return self.stack[-1]
-end function
-MetaStack.push = function(object)
-    self.stack.push(Meta.init(object))
-end function
-MetaStack.pop = function()
-    if self.depth == 0 then return
-    self.stack.pop()
-end function
-MetaStack.depth = function()
-    return self.stack.len()
-end function
-
-Meta.isClass = function(object)
-    return object isa map and object.hasIndex("__isa")
-end function
-
-Meta.startMenu = function(object)
-    ui.debug("got metaobject for menu: " + object + " initializing")
-    meta = Meta.init(object)
-    meta.print()
-    objectsStack = MetaStack.init(object)
-    while true
-        current = objectsStack.current
-        if current == null then break
-        newObject = current.menu()
-        if newObject == null then
-            objectsStack.pop()
-            continue
-        end if
-        if newObject isa list and newObject.len > 0 then
-            ui.debug("multiple select")
-            newObject = ui.select("select object", newObject)
-            if newObject isa map and not newObject.hasIndex("__isa") and newObject.hasIndex("value") then
-                newObject = newObject.value
+            if newObject != objectsStack.current then
+                ui.debug("push " + newObject + " to stack")
+                objectsStack.push(newObject)
+                ui.debug("push object " + newObject + " to stack")
             end if
-            if newObject == null or not self.isClass(newObject) then
-                newObject = objectsStack.current
-            end if
-        end if
-        if newObject != objectsStack.current then
-            ui.debug("push " + newObject + " to stack")
-            objectsStack.push(newObject)
-            ui.debug("push object " + newObject + " to stack")
-        end if
-        user_input("press any key to continue...", 0, 1, 0)
-    end while
-end function
+            user_input("press any key to continue...", 0, 1, 0)
+        end while
+    end function
