@@ -3,81 +3,106 @@ import_code("../acli.src")
 import_code("../ui.src")
 import_code("../netutils.src")
 
-// 1. Инициализация и проверка аргументов
+helpStr = ui.color("NAME\n", "info") + 
+ui.color("    pmap - net scanning tool\n\n", "info") + 
+ui.color("SYNOPSIS\n", "info") + 
+ui.color("    pmap [IPADDRESS] [OPTIONS]\n\n", "info") + 
+ui.color("DESCRIPTION\n", "info") + 
+ui.color("    net scanning tool. can scan networks, search libs in internet and scan LANs.\n", "info") + 
+ui.color("    LAN scanning remark - from outside of the network/subnetwork not all of machines can be scanned because of firewalls\n\n", "accent") + 
+ui.color("OPTIONS\n", "info") + 
+ui.color("    -ns, --netscan    scan target LAN. default is gateway router\n", "info") + 
+ui.color("    -f, --find        search ports with specified libraries throught internet\n", "info") + 
+ui.color("    -ff, --findfrom   search ports thought internet from this public ip\n", "info") + 
+ui.color("    -l, --log         save results into file\n", "info") + 
+ui.color("    --level           set messaging log level info(default)|minimal|debug\n", "info") + 
+ui.color("    -h, --help        show this window\n\n", "info") + 
+ui.color("EXAMPLES\n", "info") + 
+ui.color("    pmap -ns -l customLogName.txt\n", "info") + 
+ui.color("    pmap -ns -l\n", "info") + 
+ui.color("    pmap -f rshell -ff 8.8.8.8 -l\n", "info") + 
+ui.color("    pmap -f repo -ff 8.8.8.8 -l customLogFile\n", "info") + 
+ui.color("    pmap -f repo\n", "info") + 
+ui.color("    pmap 8.8.8.8 -l\n", "info") + 
+ui.color("    pmap 8.8.8.8 -ns -l --level debug\n\n", "info") + 
+ui.color("INPUT_POLLING\n", "info") + 
+ui.color("    during searching by -f press 'q' to stop (Ctrl+C will work as well)\n", "info")
+
 args = ArgParser.parse(params)
 
+if args.has("-h") or args.has("--help") then
+	print(helpStr)
+	exit()
+end if
+
 ui.setLogLevel(args.get("--level", "info"))
-target = ""
-if args.get("-t") != null then 
-	target = args.get("-t")
-else if args.positional.len > 0 then
+
+target = null
+if args.positional.len > 0 then
 	target = args.positional[0]
 end if
 
-if target == "127.0.0.1" then 
-	ui.info("указан локальный адрес устройства, вычисляю сетевой адрес")
-	target = get_shell.host_computer.local_ip
-	ui.info("сетевой адрес: " + target)
+netscan = args.has("-ns" ) or args.has("--netscan")
+find = args.get("-f", args.get("--find", null))
+
+if not target and not find and not netscan then
+	ui.error("no valid arguments provided, try -h")
+	exit()
 end if
 
-scanIp = true
+if target == "127.0.0.1" then 
+	ui.info("self ip specified, calculating LAN ip")
+	target = get_shell.host_computer.local_ip
+	ui.info("LAN ip: " + target)
+end if
 
 log_name = ""
 log_enabled = false
 if args.has("-l") or args.has("--log") then
 	log_enabled = true
-else if args.get("-l") != null then
-	log_name = args.get("-l")
-else if args.get("--log") != null then
-	log_name = args.get("-log")
+else 
+	log_name = args.get("-l", args.get("--log", ""))
 end if
 
-if not target or not is_valid_ip(target)then
-    ui.error("Не указана цель!")
-    print("Использование: pmap [IP] [-ns, --net-scan] [ [-l, --log] [log_file_name] ] [[-f, --find targetLib] [-ff, --findfrom ip]];" + char(10) + "имя файла логов по умолчанию: scan_(IP).txt")
-    scanIp = false
-end if
-scanByIp = function()
-	isLanIp = is_lan_ip(target)
+scanByIp = function(targetIp)
+	isLanIp = is_lan_ip(targetIp)
 	router = null
 	if isLanIp then
-		ui.debug("целевой адрес находится в локальной сети")
+		ui.debug("local network address")
 		router = get_router;
 	else 
-		ui.debug("целевой адрес находится в глобальной сети")
-		router = get_router( target )
+		ui.debug("global network address")
+		router = get_router( targetIp )
 	end if
-	if log_enabled then log_name = "scan_" + target + ".txt"
 
 	if router == null then 
-		ui.error("целевое устройство не найдено")
+		ui.error("no router")
 		return null
 	end if
 
-	ui.debug("Начинаю сканирование цели: " + ui.color(target, "accent"))
+	ui.debug("start scanning target: " + ui.color(targetIp, "accent"))
 	ui.debug("-" * 50)
 
 	ports = []
 	if not isLanIp then
-	ports = router.used_ports
+		ports = router.used_ports
 	else
-	ports = router.device_ports(target)
+		ports = router.device_ports(targetIp)
 	end if
 
 	if typeof(ports) == "string" then 
 		ui.error(ports)
 		return router
 	else if ports == null then
-		ui.error("порты устройства не найдены")
+		ui.error("device has no ports")
 		return router
 	else if ports.len == 0 then
-		ui.error("все порты устройства закрыты")
+		ui.error("all devices ports are closed")
 		return router
 	end if
 
-	// Собираем данные для таблицы
 	table_data = []
-	ui.debug("Найдено портов: " + ports.len)
+	ui.debug("Ports found: " + ports.len)
 	printRouter = function(router)
 		ui.debug(["bssid", router.bssid_name].join(":"))
 		ui.debug(["essid", router.essid_name].join(":"))
@@ -102,7 +127,6 @@ scanByIp = function()
 			port_status = ui.color("CLOSED", "danger")
 		end if
 		
-		// Добавляем строку в массив данных таблицы
 		ui.debug("port.port_number")
 		table_data.push([
 			str(port.port_number),
@@ -111,34 +135,55 @@ scanByIp = function()
 			service_info[1], 
 			lan_ips])
 	end for
-	// 4. Вывод результата
 	table = ui.table(["PORT", "STATUS", "SERVICE", "VERSION", "LAN"], table_data)
 	print(table)
+	if log_enabled and log_name == "" then log_name = "scan_" + targetIp + ".txt"
+	if log_name != "" then
+		content = "Scan report for " + target + char(10)
+		content = content + ui.stripTags(table)
+		ui.saveLog(log_name, content)
+	end if
 
-	ui.success("Сканирование завершено.")
+	ui.success("Scan complete.")
 	return router
 end function
-if scanIp then
-	router = scanByIp()
+
+if target != null and is_valid_ip(target) then
+	router = scanByIp(target)
 	if router then
 		tree = ""
-		if args.has("-ns") or args.has("--net-scan") then
+		if netscan then
 			rootNode = NetUtils.scanNetwork(router)
 			tree = ui.tree(rootNode)
 			print(tree)
 		end if
-
-		if log_enabled then
-			if log_name.len == 0 then log_name = "scan_report_" + current_date + ".txt"
-			content = "Scan report for " + target + char(10)
-			content = content + ui.stripTags(table)
+		if log_enabled and log_name == "" then log_name = "scan_" + target + ".txt"
+		if log_name != "" then
+			content = "LAN scan report for " + target + char(10)
 			if tree.len > 0 then
 				content = content + char(10) + ui.stripTags(tree)
 			end if
 			ui.saveLog(log_name, content)
 		end if
 	end if
+else if netscan and target == null then
+	router = get_router()
+	tree = ""
+	if netscan then
+		rootNode = NetUtils.scanNetwork(router)
+		tree = ui.tree(rootNode)
+		print(tree)
+	end if
+	if log_enabled and log_name == "" then log_name = "scan_" + router.local_ip + ".txt"
+	if log_name != "" then
+		content = "Scan report for " + target + char(10)
+		if tree.len > 0 then
+			content = content + char(10) + ui.stripTags(tree)
+		end if
+		ui.saveLog(log_name, content)
+	end if
 end if
+
 ipFromInt = function(num)
 	amask = bitwise("<<", 255, 8*3)
 	bmask = bitwise("<<", 255, 8 * 2)
@@ -151,6 +196,7 @@ ipFromInt = function(num)
 	ip = [a,b,c,d].join(".")
 	return ip
 end function
+
 intFromIp = function(ip)
 	if ip == null then return null
 	ui.debug(ip)
@@ -166,13 +212,11 @@ intFromIp = function(ip)
 	return a + b + c + d
 end function
 
-regex = args.get("-f", null)
-if regex == null then regex = args.get("--find", null)
+regex = args.get("-f", args.get("--find", null))
 if regex != null then
-	if log_enabled and log_name.len == 0 then log_name = "scan_for_" + regex + ".txt"
+	if log_enabled and log_name == "" then log_name = "search_" + regex + ".txt"
 	ui.info("searching for lib '" + regex + "', press 'q' to stop")
-	dip = intFromIp(args.get("-ff", null))
-	if dip == null then dip = intFromIp(args.get("--findfrom", "1.1.1.1"))
+	dip = intFromIp(args.get("-ff", args.get("--findfrom", "1.1.1.1")))
 	counter = 0
 	while dip < 4294967295
 		key = poll_input
@@ -194,7 +238,7 @@ if regex != null then
 		output = ip + ":" + portsWhole
 		if portsWhole.is_match(regex) then
 			ui.warn(output)
-			if log_name.len != 0 then ui.saveLog(log_name, output, true)
+			if log_name != "" then ui.saveLog(log_name, output, true)
 		else	
 			ui.debug(output)
 		end if

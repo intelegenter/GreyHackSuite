@@ -238,6 +238,13 @@ ui.saveLog = function(filename, content, silent = false)
         computer.touch(current_path, filename)
         file = computer.File(current_path + "/" + filename)
     end if
+    if not file or file isa string then
+        self.error("can't open/create log file " + ui.color(current_path + "/" + filename, "accent"))
+        if file isa string then
+            ui.error(file)
+        end if
+        return
+    end if
 
     cleanContent = self.stripTags(content)
 	timestamp = self.getTime()
