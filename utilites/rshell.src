@@ -2,52 +2,127 @@
 import_code("../acli.src")
 import_code("../ui.src")
 
-helpStr = "Usage: rshell ip_adress port=1222 [-t|--title (process_title)]"
+helpStr = ui.color("NAME\n", "info") + 
+ui.color("  rshell - reverse shell client.\n\n" , "info") + 
+ui.color("SYNOPSIS\n" , "info") + 
+ui.color("  rshell [IPADDRESS] [PORT] [OPTIONS]\n\n", "info") +
+ui.color("DESCRIPTION\n", "info") +
+ui.color("  establish reverse shell connection to specified ip adress\n", "info") +
+ui.color("  can traceless remove files list if specify -r\n\n" , "info") + 
+ui.color("OPTIONS\n", "info") +
+ui.color("  -t, --title    rshell process name\n", "info") +
+ui.color("  -r, --remove   to cleanup files (default: metaxploit.so|rshell) inside current dir\n" , "info") + 
+ui.color("                  and leave ~/.Trash/there_was_i_and_my_friend_i\n", "info") +
+ui.color("                  without any system.log traces even on guest rights\n", "info") +
+ui.color("  --level        to specify messages log level: info(default), minimal, debug\n", "info") +
+ui.color("  -h, --help     to show this text and exit\n\n" , "info") + 
+ui.color("EXAMPLES\n" , "info") + 
+ui.color("  rshell 1.2.3.4\n" , "info") + 
+ui.color("  rshell 1.2.3.4 1234 -t hakataka -r --level debug\n" , "info") + 
+ui.color("  rshell -r --level debug\n", "info") + 
+ui.color("  rshell -r notes.txt|hacktool|metaxploit.so|rshell --level debug\n" , "info") + 
+ui.color("  rshell 1.2.3.4 -r metaxploit.so|rshell|ex -t hakataka --level debug", "info")
+
+args = ArgParser.parse(params)
+ui.setLogLevel(args.get("--level", "info"))
+
+if params.len == 0 then
+    ui.error("no parameters was provided, try '-h' or '--help' to get help")
+    exit()
+end if
+
+
+if args.has("-h") or args.has("--help") then
+    ui.debug("displaying help by request")
+    print(helpStr)
+    ui.debug("exiting")
+    exit()
+end if
 
 lib = include_lib("/lib/metaxploit.so")
 if not lib then lib = include_lib(current_path + "/metaxploit.so")
 if lib == null then
     ui.error("can't get metaxploit.so")
     exit()
+    ui.debug("exiting because of missing metaxploit.so")
 end if 
 
-args = ArgParser.parse(params)
-
-ui.setLogLevel(args.get("--level", "info"))
 
 ui.debug("rshell launched with " + params + "; args = " + args)
 
-if args.positional.len == 0 then exit(ui.color(helpStr, "accent"))
 port = 1222
-if args.positional.len > 1 then port = args.positional[1].val
-ip = args.positional[0]
-if not is_valid_ip(ip) then
-    ui.error("Error: invalid ip adress " + ip)
-    ui.info(helpStr)
-    exit()
+ip = null
+if args.positional.len > 0 then
+    port = 1222
+    if args.positional.len > 1 then port = args.positional[1].val
+    ip = args.positional[0]
+    if not is_valid_ip(ip) then
+        ui.error("Error: invalid ip adress " + ip)
+        print(helpStr)
+        exit()
+    end if
 end if
-
 
 title = args.get("-t", args.get("--title", "rshell_client"))
 
-lib.rshell_client(ip, port, title)
-ui.success("rshell connected to " + ip + ":" + port + ", process: " + title)
+if ip != null then
+    lib.rshell_client(ip, port, title)
+    ui.success("rshell connected to " + ip + ":" + port + ", process: " + title)
+end if
 
+cleanupStr = ""
 if args.has("-r") or args.has("--remove") then
+    cleanupStr = "metaxploit.so|rshell"
+else 
+    cleanupStr = args.get("-r", args.get("--remove", ""))
+end if
+
+if cleanupStr.len > 0 then
+    ui.debug("Cleanup str = " + cleanupStr)
+    cleanupList = cleanupStr.split("\|")
+    ui.debug("Cleanup list = " + cleanupList)
     comp = get_shell.host_computer()
     rootFolderPath = "/root"
     rootfolder = comp.File(rootFolderPath)
     file = comp.File(current_path())
-    ui.debug("creating blank file at " + current_path() + " on " + comp.public_ip + ":" + comp.local_ip) 
+    ui.debug("creating blank file at " + ui.color(current_path(), "accent") + " on " + ui.color(comp.public_ip, "accent") + " : " + ui.color(comp.local_ip, "accent")) 
     comp.touch(current_path(), "blank.txt")
     blankFile = comp.File(current_path() + "/blank.txt")
     if ui.checkError(blankFile, "can't create blank file in " + current_path() + "/blank.txt", "") == null then 
         exit()
     end if
     blankFile.set_content("there was I and my friend: I")
-    blankFile.move(current_path(), "metaxploit.so")
-    blankFile.move(current_path(), "ex")
-    blankFile.move(current_path(), "rshell")
-    blankFile.move("/home/guest/.Trash", "there_was_i_and_my_friend_i")
-    
+    for entry in cleanupList
+        if entry == "" then 
+            ui.debug("skip empty entry")
+            continue
+        end if
+        ui.debug("removing " + current_path() + "/" + entry)
+        result = blankFile.move(current_path(), entry)
+        if result == null then
+            ui.warn("move function returns null")
+        else if result isa number then
+            if result == true then
+                ui.debug("removed")
+            else
+                ui.error("Error: can't remove " + current_path() + "/" + entry)
+                ui.debug("not removed")
+            end if
+        else if result isa string then
+            ui.error("Error: can't remove " + current_path() + "/" + entry + "; " + result)
+        else 
+            ui.debug("unreachable state")
+        end if
+    end for
+    ui.debug("moving to " + get_abs_path("~/.Trash"))
+    result = blankFile.move(get_abs_path("~/.Trash"), "there_was_i_and_my_friend_i")
+    if result isa number then
+        if result then
+            ui.debug("successfully moved")
+        else 
+            ui.error("can't move blank file to " + get_abs_path("~/.Trash"))
+        end if
+    else if result isa string then
+        ui.error("can't move blank file to " + get_abs_path("~/.Trash") + ": " + result)
+    end if
 end if
