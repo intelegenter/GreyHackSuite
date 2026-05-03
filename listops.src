@@ -11,7 +11,7 @@ end function
 Listops.transform = function(list, transformer)
     newList = []
     for item in list
-        newList.push(transformator(item))
+        newList.push(transformer(item))
     end for
     return newList
 end function

@@ -165,7 +165,7 @@ justPerform = function(addr, zone, args)
 		ui.debug("computer, provide options")
 		compmenu = [{"text": "open", "value": "open", "key": "open"}, 
 					{"text": "collect", "value": "collect", "key": "collect"}]
-		subopt = ui.select("what do you want to do with computer?", compmenu, "1")
+		subopt = ui.select("what do you want to do with computer?", compmenu, false, "1")
 		ui.debug("selected option: " + subopt.value)
 		if subopt == null then exit()
 		if subopt.value == "open" then 
@@ -338,6 +338,7 @@ if args.has("--remote-called") then
 end if
 
 nextchoice = "1"
+firsttime = true
 while true
 	options = []
 	for m in vulns
@@ -361,7 +362,8 @@ while true
 		ui.saveLog(log_path, str)
 	end if
 
-	opt = ui.select("pick vulnerability", options, nextchoice, true)
+	opt = ui.select("pick vulnerability", options, not firsttime, nextchoice, true)
+	firsttime = false
 	if opt == null then 
 		ui.error("error: menu returned null opt")
 		break
@@ -386,12 +388,13 @@ while true
 		ui.debug("computer, provide options")
 		compmenu = [{"text": "open", "value": "open", "key": "open"}, 
 					{"text": "collect", "value": "collect", "key": "collect"}]
-		subopt = ui.select("what do you want to do with computer?", compmenu, "1")
+		subopt = ui.select("what do you want to do with computer?", compmenu, false, "1")
 		ui.debug("selected option: " + subopt.value)
 		if subopt == null then continue
 		if subopt.value == "open" then 
 			ui.debug("opening computer")
 			Meta.startMenu(result)
+			firsttime = true
 		else if subopt.value == "collect" then
 			ui.debug("collecting computer")
 			collector = Collector.init(ex, opt.value.addr, opt.value.zone)
@@ -418,8 +421,11 @@ while true
 			ui.debug(ui.color("calling collector.private.scanRouter: ", "danger") + @collector.private.scanRouter)
 			collector.private.scanRouter(collector, router)
 			Meta.startMenu(collector)
+			firsttime = true
 		end if
 	else
 		Meta.startMenu(result)
+		firsttime = true
 	end if
+	firsttime = false
 end while

@@ -86,12 +86,15 @@ ui.confirm = function(msg, default = "")
     end while
 end function
 
-ui.select = function(title, options, default = "0", addToHistory = false)
+ui.select = function(title, options, hidemenu = false, default = "0", addToHistory = false)
     keymap = {}
     for opt in options
         if opt.hasIndex("key") then keymap[opt.key] = opt
     end for
-    print(self.bold("\n" + title + "[" + default + "]" + ":"))
+    if not hidemenu then
+        ui.info("type 'menu' instead of option to show whole menu again")
+        print(self.bold("\n" + title + "[" + default + "]" + ":"))
+    end if
     ui.debug("menu for: " + options)
     if options == null or not options isa list or (options isa list and options.len == 0) then
         ui.error("error: no options to select from")
@@ -116,9 +119,13 @@ ui.select = function(title, options, default = "0", addToHistory = false)
         else
             optText = options[i]
         end if
-        print(self.color(" [" + (i + 1) + "] ", "primary") + optText)
+        if not hidemenu then 
+            print(self.color(" [" + (i + 1) + "] ", "primary") + optText)
+        end if
     end for
-    print(self.color(" [0] ", "primary") + self.color(self.bold("cancel"), "accent"))
+    if not hidemenu then
+        print(self.color(" [0] ", "primary") + self.color(self.bold("cancel"), "accent"))
+    end if
     
     while true
         choice = ""
@@ -130,6 +137,8 @@ ui.select = function(title, options, default = "0", addToHistory = false)
         end if
         if choice == "0" then
             return {"text":"cancel", "value": null, "choice":choice}
+        else if choice == "menu" then
+            return self.select(title, options, false, default, addToHistory)
         else if keymap.hasIndex(choice) then
             ret = keymap[choice]
             ret["choice"] = choice
