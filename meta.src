@@ -1,5 +1,4 @@
     //meta.src
-
     funcRef.signature = function
     return str(@self)
     end function
@@ -36,6 +35,13 @@
         self.args = {}
         for key in self.meta.indexes
             member = self.meta[key]
+            checkstr = "" + member
+            if checkstr.hasIndex("FUNCTION") == null then
+                continue
+            else if member isa map then
+                continue
+            end if
+            ui.debug("member to scan signature: " + member)
             signature = (@member).signature
             ui.debug("method: " + key + ":" + signature)
             args = (@member).arglist
@@ -48,11 +54,19 @@
         if object.hasIndex("classID") and object.classID == "computer" then 
             ui.debug("mocking computer " + object)
             ui.debug("args = " + self.args)
-            self.compMock(object)
+            if object.hasIndex("classId") and object.classID != "computer" then 
+                ui.debug("not a computer object, cant mock")
+            else
+                Mock.mockComputer(self)
+            end if
         else if object.hasIndex("classID") and object.classID == "file" then 
             ui.debug("mocking file " + object)
             ui.debug("args = " + self.args)
-            self.fileMock(object)
+            if object.hasIndex("classId") and object.classID != "file" then 
+                ui.debug("not a file object, cant mock")
+            else
+                Mock.mockFile(self)
+            end if
         end if
         self.vars = {}
         return self
@@ -92,80 +106,6 @@
             ui.error(file + " is not a File")
             return null
         end if
-    end function
-
-    Meta.compMock = function(computer)
-        if computer.hasIndex("classId") and computer.classID != "computer" then return null
-        ui.debug("comp mocking function, args = " + self.args)
-        localSelf = self
-        self.args["tree"] = ["self"]
-        self.methods["tree"] = function(self)
-            theFile = self.File("/")
-            ui.debug("root file = " + theFile)
-            rootNode = localSelf.scanFileTree(theFile)
-            ui.debug("root node = " + rootNode)
-            tree = ui.treeText(rootNode)
-            print(tree)
-        end function
-        self.args["mail"] = ["self", "username"]
-        self.methods["mail"] = function(self, username)
-            ui.debug("accessing file " + "/home/" + username + "/Config/Mail.txt")
-            theFile = self.File("/home/" + username + "/Config/Mail.txt")
-            return Meta.checkFile(theFile)
-        end function
-        self.args["bank"] = ["self", "username"]
-        self.methods["bank"] = function(self, username)
-            ui.debug("accessing file " + "/home/" + username + "/Config/Bank.txt")
-            theFile = self.File("/home/" + username + "/Config/Bank.txt")
-            return Meta.checkFile(theFile)
-        end function
-    end function
-
-    Meta.fileMock = function(file)
-        if file.hasIndex("classId") and file.classID != "file" then return null
-        ui.debug("file mocking function, args = " + self.args)
-        self.args["cd"] = ["self", "path=/"]
-        localSelf = self
-        self.methods["cd"] = function(self, Path = "/")
-            ui.debug("changing directory to " + Path)
-            if self == null then return null
-            if Path == null then return self
-            file = self
-            getRoot = function()
-                while file != null and file.name() != "/"
-                    file = file.parent
-                end while
-                if file == null then return null
-                return file
-            end function
-            if Path == "/" then
-            return getRoot()
-            else if Path == ".." then
-                return file.parent()
-            end if
-            if Path.len == 0 then return null
-            if Path[0] == "/" then 
-                file = getRoot()
-                Path = Path[1:]
-            else if Path.len > 1 and Path[0:1] == ".." then
-                file = file.parent
-                Path = Path[2:]
-            end if
-            file = localSelf.getRelativeFile(file, Path)
-            return file
-        end function
-        self.args["mail"] = ["self", "username"]
-        self.methods["mail"] = function(self, username)
-            cdFunc = localSelf.methods["cd"]
-            file = cdFunc(self, "/home/" + username + "/Config/Mail.txt")
-            return Meta.checkFile(file)
-        end function
-        self.args["bank"] = ["self", "username"]
-        self.methods["bank"] = function(self, username)
-            cdFunc = localSelf.methods["cd"]
-            file = cdFunc(self, "/home/" + username + "/Config/Bank.txt")
-            return Meta.checkFile(file)
-        end function
     end function
 
     Meta.getRelativeFile = function(file, path)

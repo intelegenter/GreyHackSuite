@@ -55,6 +55,7 @@ NetUtils.scanNetwork = function(router, targetIp = null, visited = null)
                 if childNode then node.children.push(childNode)
             end for
         end if
+        ui.debug("NetUtils.scanNetwork result = " + node)
         return node
     end if
 

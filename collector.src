@@ -1,110 +1,127 @@
 //collector.src
 Collector = {}
-Collector.init = function(ex, addr, zone)
-    if ex.targetLib == null then return null
-    if ex.lib == null then return null
-    self = new Collector
-    self.ex = ex
-    self.addr = addr
-    self.zone = zone
-    return self
-end function
+Collector["private"] = {}
 
-Collector.getIpList = function(self, node)
+Collector["private"]["getIpList"] = function(selfObj, node)
     iplist = []
-    if node == null then return []
-    if not node.hasIndex("ip") then return []
-    iplist.push node.ip
-    if not node.hasIndex("children") then return iplist
+    ui.debug("collecting ips with node = " + node)
+    if node == null then 
+        ui.debug(ui.color("node is null", "danger"))
+        return []
+    end if
+    if not node.hasIndex("ip") then 
+        ui.debug(ui.color("node doesn't contain the ip: ", "danger") + node)
+        return []
+    end if
+    iplist.push(node.ip)
+    if not node.hasIndex("children") then 
+        ui.debug(ui.color("node doesn't contain the children: ", "danger") + node + ui.color("; returning iplist", "accent"))
+        return iplist
+    end if
     children = node.children
-    if not children isa list then return iplist
+    if not children isa list then 
+        ui.debug(ui.color("children is not a list: ", "danger") + children + ui.color("; returning iplist", "accent"))
+        return iplist
+    end if
     for child in children
-        iplist = iplist + self.getIpList(child)
+        iplist = iplist + selfObj.private.getIpList(selfObj, child)
     end for
+    ui.debug("collected ips list = " + iplist)
     return iplist
 end function
 
-Collector.scanRouter = function(self, router)
+Collector["private"]["scanRouter"] = function(selfObj, router)
     ui.info("scanning network")
+    ui.debug(ui.color("scanning with self = ", "danger") + selfObj)
+    ui.debug(ui.color("self.private = ", "danger") + selfObj.private)
     rootNode = NetUtils.scanNetwork(router)
-    self.ips = self.getIpList(rootNode)
-    ui.info("found " + self.ips.len + " ips")
+    selfObj.ips = selfObj.private.getIpList(selfObj, rootNode)
+    ui.info("found " + selfObj.ips.len + " ips")
 end function
 
-Collector.collect = function(self)
-    self.infos = []
-    for ip in self.ips
-        usersinfo = {}
-        usersinfo.ip = ip
-        ui.debug("overflowing on addr " + self.addr + " with zone " + self.zone)
-        comp = ex.attack(self.addr, self.zone, ip)
-        if comp == null then 
-            ui.error("overflow = null " + [self.addr, self.zone, ip].join(" "))
-            continue
-        else if comp isa string then 
-            ui.error("error: " + comp)
-            continue
-        else if not comp isa map then
-            ui.error("wrong object type: " + typeof(comp))
-            continue
+Collector["private"]["collectCompInfo"] = function(comp)
+    usersinfo = {}
+    if not comp.hasIndex("classID") or comp.classID != "computer" then
+        ui.debug("not a computer object")
+        return null
+    end if
+    homedir = comp.File("/home")
+    if homedir == null then 
+        ui.debug("can't acces home dir")
+        if homedir isa string then
+            ui.error(homedir)
         end if
-        if not comp.hasIndex("classID") or comp.classID != "computer" then continue
-        homedir = comp.File("/home")
-        if homedir == null or homedir isa string then continue
-        homefolders = homedir.get_folders()
-        passwd = comp.File("/etc/passwd")
-        passwdcontent = passwd.get_content()
-        passentries = null
-        if passwdcontent != null then
-            usersinfo.passwd = passwdcontent
-            passentries = passwdcontent.split(char(10))
-        else
-            usersinfo.passwd = null
-        end if
-        usersinfo.users = []
+        return null
+    end if
+    homefolders = homedir.get_folders()
+    passwd = comp.File("/etc/passwd")
+    passwdcontent = passwd.get_content()
+    passentries = null
+    if passwdcontent != null then
+        usersinfo.passwd = passwdcontent
+        passentries = passwdcontent.split(char(10))
+    else
+        usersinfo.passwd = null
+    end if
+    usersinfo.users = []
+    if passentries != null then
+        ui.debug("looking for root in " + passentries)
+        for entry in passentries
+            if entry.indexOf("root") == 0 then
+                user = {"login": "root", "pass":entry.split(":")[1]}
+                ui.debug("found root user: " + user)
+                usersinfo.users.push(user)
+                break
+            end if
+        end for
+    end if
+    for folder in homefolders
+        user = {"login": "no_user", "pass": "no_pass"}
+        user.login = folder.name
+        if user.login == "guest" then continue
+        mail = comp.File("/home/" + user.login + "/Config/Mail.txt")
+        if mail != null and not mail isa string then user.mail = mail.get_content
+        bank = comp.File("/home/" + user.login + "/Config/Bank.txt")
+        if bank != null and not bank isa string then user.bank = bank.get_content
         if passentries != null then
-            ui.debug("looking for root in " + passentries)
             for entry in passentries
-                if entry.indexOf("root") == 0 then
-                    user = {"login": "root", "pass":entry.split(":")[1]}
-                    ui.debug("found root user: " + user)
-                    usersinfo.users.push(user)
+                if entry.indexOf(user.login) == 0 then
+                    user.pass = entry.split(":")[1]
                     break
                 end if
             end for
         end if
-        for folder in homefolders
-            user = {"login": "no_user", "pass": "no_pass"}
-            user.login = folder.name
-            if user.login == "guest" then continue
-            mail = comp.File("/home/" + user.login + "/Config/Mail.txt")
-            if mail != null and not mail isa string then user.mail = mail.get_content
-            bank = comp.File("/home/" + user.login + "/Config/Bank.txt")
-            if bank != null and not bank isa string then user.bank = bank.get_content
-            if passentries != null then
-                for entry in passentries
-                    if entry.indexOf(user.login) == 0 then
-                        user.pass = entry.split(":")[1]
-                        break
-                    end if
-                end for
-            end if
-            ui.debug("found user: " + user)
-            usersinfo.users.push(user)
-        end for
-        ui.debug("found users info: " + usersinfo)
-        self.infos.push(usersinfo)
+        ui.debug("found user: " + user)
+        usersinfo.users.push(user)
     end for
+    ui.debug("found users info: " + usersinfo)
+    return usersinfo
 end function
 
-Collector.toText = function(self)
-    if not self.hasIndex("infos") then
-        ui.warn("no collection was collected, try to call collect() first")
-        return null
-    end if
-    ui.debug("converting to text: " + self.infos) 
+Collector["private"]["infoToText"] = function(info)
+    ui.debug("converting to text: " + info) 
     result = ""
-    for info in self.infos
+    if info.hasIndex("ip") then
+        result = result + info.ip + ":" + char(10)
+    end if
+    if info.hasIndex("users") then
+        for user in info.users
+            result = result + "    " + user.login + ":" + user.pass + char(10)
+            if user.hasIndex("mail") then
+                result = ui.color(result + "        " + user.mail, "accent") + char(10)
+            end if
+            if user.hasIndex("bank") then
+                result = ui.color(result + "        " + user.bank, "accent") + char(10)
+            end if
+        end for
+    end if
+    return result
+end function
+
+Collector["private"]["toText"] = function(infos)
+    ui.debug("converting to text: " + infos) 
+    result = ""
+    for info in infos
         result = result + info.ip + ":" + char(10)
         for user in info.users
             result = result + "    " + user.login + ":" + user.pass + char(10)
@@ -117,6 +134,37 @@ Collector.toText = function(self)
         end for
     end for
     return result
+end function
+
+Collector.collect = function(self)
+    self.infos = []
+    for ip in self.ips
+        ui.debug("overflowing on addr " + self.addr + " with zone " + self.zone)
+        comp = ex.attack(self.addr, self.zone, ip)
+        if comp == null then 
+            ui.error("overflow = null " + [self.addr, self.zone, ip].join(" "))
+            continue
+        else if comp isa string then 
+            ui.error("error: " + comp)
+            continue
+        else if not comp isa map then
+            ui.error("wrong object type: " + typeof(comp))
+            continue
+        end if
+        usersinfo = Collector.private.collectCompInfo(comp)
+        if usersinfo == null then continue
+        usersinfo.ip = ip
+        self.infos.push(usersinfo)
+    end for
+end function
+
+
+Collector.toText = function(self)
+    if not self.hasIndex("infos") then
+        ui.warn("no collection was collected, try to call collect() first")
+        return null
+    end if
+    return Collector.private.toText(self.infos)
 end function
 
 Collector.toFile = function(self, filePath)
@@ -156,4 +204,13 @@ Collector.toFile = function(self, filePath)
     return path
 end function
 
-
+Collector.init = function(ex, addr, zone)
+    if ex.targetLib == null then return null
+    if ex.lib == null then return null
+    self = new Collector
+    self.ex = ex
+    self.addr = addr
+    self.zone = zone
+    self["private"] = Collector["private"]
+    return self
+end function

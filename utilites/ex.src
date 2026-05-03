@@ -1,3 +1,4 @@
+import_code("../mock.src")
 import_code("../acli.src")
 import_code("../ui.src")
 import_code("../exploit.src")
@@ -172,7 +173,10 @@ justPerform = function(addr, zone, args)
 			Meta.startMenu(result)
 		else if subopt.value == "collect" then
 			ui.debug("collecting computer")
+			ui.debug(ui.color("creating collector", "danger"))
 			collector = Collector.init(ex, addr, zone)
+			ui.debug(ui.color("collector created: ", "danger") + collector)
+			ui.debug(ui.color("; collector .private: ", "danger") + collector.private)
 			if collector == null then 
 				ui.error("can't initialize collector")
 				exit()
@@ -184,7 +188,7 @@ justPerform = function(addr, zone, args)
 				router = get_router()
 			end if
 			ui.debug("scanning root router of " + router.public_ip()) 
-			collector.scanRouter(router)
+			collector.private.scanRouter(collector, router)
 			Meta.startMenu(collector)
 		end if
 	else
@@ -391,6 +395,8 @@ while true
 		else if subopt.value == "collect" then
 			ui.debug("collecting computer")
 			collector = Collector.init(ex, opt.value.addr, opt.value.zone)
+			ui.debug(ui.color("collector created: ", "danger") + collector)
+			ui.debug(ui.color("; collector .private: ", "danger") + collector.private)
 			if collector == null then 
 				ui.error("can't initialize collector")
 				continue
@@ -409,7 +415,8 @@ while true
 				continue
 			end if
 			ui.debug("scanning root router of " + router.public_ip()) 
-			collector.scanRouter(router)
+			ui.debug(ui.color("calling collector.private.scanRouter: ", "danger") + @collector.private.scanRouter)
+			collector.private.scanRouter(collector, router)
 			Meta.startMenu(collector)
 		end if
 	else
