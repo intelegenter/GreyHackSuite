@@ -34,14 +34,11 @@
         self.methods = {}
         self.args = {}
         for key in self.meta.indexes
-            member = self.meta[key]
-            checkstr = "" + member
-            if checkstr.hasIndex("FUNCTION") == null then
-                continue
-            else if member isa map then
+            member = @self.meta[key]
+            if @member isa map then
                 continue
             end if
-            ui.debug("member to scan signature: " + member)
+            ui.debug("member to scan signature: " + @member)
             signature = (@member).signature
             ui.debug("method: " + key + ":" + signature)
             args = (@member).arglist
