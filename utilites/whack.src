@@ -2,6 +2,22 @@
 import_code("../ui.src")
 import_code("../acli.src")
 
+helpStr = ui.color("NAME\n", "info") +
+ui.color("    whack - wifi hack tool\n\n", "info") +
+ui.color("SYNOPSIS\n", "info") +
+ui.color("    whack [OPTIONS]\n\n", "info") +
+ui.color("DESCRIPTION\n", "info") +
+ui.color("    tool to scan and hack any wi-fi network password and save it to 'wifi.txt' file\n", "info") +
+ui.color("    ensure that you turned on the wi-fi monitor mode before use whack\n\n", "info") +
+ui.color("OPTIONS\n", "info") +
+ui.color("    -h, --help    to see that manual\n", "info") +
+ui.color("    --level       to set messages log level info(devault)|minimal|debug\n\n", "info") +
+ui.color("EXAMPLES\n", "info") +
+ui.color("    whack -h\n", "info") +
+ui.color("    whack --help\n", "info") +
+ui.color("    whack --level debug\n", "info") +
+ui.color("    whack --level minimal\n", "info")
+
 checkAlredyHaveResult = function(bssid, essid)
     file = comp.File(current_path + "/wifi.txt")
     if file == null then return false
@@ -11,7 +27,7 @@ checkAlredyHaveResult = function(bssid, essid)
 end function
 
 saveResult = function(netdevice, bssid, essid, password)
-    ui.info([netdevice, bssid, essid, password].join(" "))
+    ui.info([netdevice, bssid, essid].join(" ") + " " + ui.color(ui.bold(password), "success"))
     comp = get_shell.host_computer
     file = comp.File(current_path + "/wifi.txt")
     if file == null then 
@@ -35,21 +51,37 @@ decryptPass = function(filepath)
 end function
 
 monitorNetwork = function(bssid, pwr, essid)
-    acksRequired = (300000.0 / (pwr + 15.0))
+    acksRequired = ceil((300000.0 / (pwr + 15.0)))
+    ui.info("listening on " + [bssid, "" + pwr + "%", essid].join(" "))
+    ui.info("Required ACKs = " + ui.color(ui.bold(acksRequired), "accent"))
 	ui.debug("trying aireplay " + [bssid, essid, pwr, acksRequired].join(" "))
-    ui.info(cryptools.aireplay(bssid, essid, acksRequired))
+    result = cryptools.aireplay(bssid, essid, acksRequired)
 end function
 
 scanNetwork = function(network)
-    if network == null then return null
-    if not network isa string then return null
+    ui.debug("scanNetwork()")
+    if network == null then
+        ui.debug("network is null")
+        return null
+    end if
+    if not network isa string then 
+        ui.debug("network is not a string")
+        return null
+    end if
     info = network.split(" ")
-    if info.len < 3 then return null
+    if info.len < 3 then 
+        ui.debug(info + " has less than 3 elements")
+        return null
+    end if
 	ui.debug("scanning network " + network)
     bssid = info[0]
     pwr = info[1].remove("%").val
     essid = info[2]
-    if checkAlredyHaveResult(bssid, essid) then return null
+    ui.debug("get " + [bssid, pwr, essid].join(", "))
+    if checkAlredyHaveResult(bssid, essid) then 
+        ui.info("there is alredy result for " + network + ui.color(" skipping...", "success"))
+        return null
+    end if
 	ui.debug("extracted " + [bssid, pwr, essid].join(" "))
     monitorNetwork(bssid, pwr, essid)
     pass = decryptPass(current_path + "/file.cap")
@@ -61,26 +93,54 @@ scanDevice = function(device)
     if not device isa string or device.len == 0 then return null
     ui.info(device)
     info = device.split(" ")
-    if info.len < 3 then return null
+    if info.len < 3 then
+        ui.debug("incorrect device info: " + device + " : " + info)
+        return null
+    end if
     interface = info[0]
-    monitorSupport = info[2]
-    if interface.indexOf("wlan") == null then return null
-    if not monitorSupport then return null
+    monitorSupport = false
+    if info[2] == "True" then
+        ui.success("Monitor support detected")
+        monitorSupport = true
+    else 
+        ui.error("Error: device " + interface + " is not in monitor mode")
+        return null
+    end if
+    if interface.indexOf("wlan") == null then 
+        ui.debug("device " + interface + " is not wifi device")
+        return null
+    end if
     comp = get_shell.host_computer
+    ui.debug("getting wifi networks...")
     networks = comp.wifi_networks(interface)
+    ui.debug("get networks: " + networks)
     for net in networks
+        ui.debug("scan network " + net)
         result = scanNetwork(net)
-        if result == null then continue
+        if result == null then 
+            ui.debug("no scan result, continueing")
+            continue
+        end if
+        ui.debug("saving result")
         saveResult(interface, result[0], result[2], result[3])
     end for
 end function
 
 cryptools = include_lib("/lib/crypto.so")
 if not cryptools then cryptools = include_lib(current_path + "/crypto.so")
-if not cryptools then exit(ui.color("Error: Missing crypto library", "danger"))
+if not cryptools then 
+    ui.error("Error: Missing crypto library")
+    exit()
+end if
+
 args = ArgParser.parse(params)
 
 ui.setLogLevel(args.get("--level", "info"))
+if args.has("-h") or args.has("--help") then
+    print(helpStr)
+    exit()
+end if
+
 comp = get_shell.host_computer
 devices = comp.network_devices.split(char(10))
 if devices == null or devices.len == 0 then exit(ui.color("No network devices found"))
