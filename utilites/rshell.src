@@ -41,11 +41,13 @@ if args.has("-r") or args.has("--remove") then
     ui.debug("creating blank file at " + current_path() + " on " + comp.public_ip + ":" + comp.local_ip) 
     comp.touch(current_path(), "blank.txt")
     blankFile = comp.File(current_path() + "/blank.txt")
-    if blankFile == null then ui.error("can't create blank file in " + current_path() + "/blank.txt")
-    if blankFile isa string then ui.error(blankFile)
+    if ui.checkError(blankFile, "can't create blank file in " + current_path() + "/blank.txt", "") == null then 
+        exit()
+    end if
+    blankFile.set_content("there was I and my friend: I")
     blankFile.move(current_path(), "metaxploit.so")
     blankFile.move(current_path(), "ex")
     blankFile.move(current_path(), "rshell")
-    blankFile.move(current_path(), "hello")
-    blankFile.set_content("there was I and my friend: I")
+    blankFile.move("/home/guest/.Trash", "there_was_i_and_my_friend_i")
+    
 end if

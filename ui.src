@@ -309,3 +309,14 @@ ui.tree = function(node, prefix = "", isLast = true)
     end if
     return outStr
 end function
+
+ui.checkError = function(obj, nullmsg, stringprefix)
+    if obj == null then 
+        ui.error(nullmsg)
+        return null
+    else if obj isa string then
+        ui.error(stringprefix + obj)
+        return null
+    end if
+    return obj
+end function

@@ -8,7 +8,7 @@ Listops.removeEntries = function(list, entry)
     end for
 end function
 
-Listops.transform = function(list, transformator)
+Listops.transform = function(list, transformer)
     newList = []
     for item in list
         newList.push(transformator(item))
