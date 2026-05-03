@@ -1,6 +1,40 @@
 //irshell.src
 import_code("../acli.src")
 import_code("../ui.src")
+
+helpStr = ui.color("NAME", "info") + 
+ui.color("    irshell - interface for reverse shell", "info") + 
+ui.color("", "info") + 
+ui.color("SYNOPSIS", "info") + 
+ui.color("    irshell [OPTIONS]", "info") + 
+ui.color("", "info") + 
+ui.color("DESCRIPTION", "info") + 
+ui.color("    interface for reverse shell", "info") + 
+ui.color("", "info") + 
+ui.color("OPTIONS", "info") + 
+ui.color("    -c, --clear   flag, clears the system.log if rshell has root rights", "info") + 
+ui.color("    -k, --kill    option, killing all processes on remote machine wich matches the pattern", "info") + 
+ui.color("    -u, --upload  option, uploads metaxploit.so from /lib and rshell from /hack to target home", "info") + 
+ui.color("    --level       option, messages log level info(default)|minimal|debug ", "info") + 
+ui.color("    -h, --help    flag, shows this message", "info") + 
+ui.color("    ", "info") + 
+ui.color("EXAMPLES", "info") + 
+ui.color("    irshell", "info") + 
+ui.color("    irshell -c", "info") + 
+ui.color("    irhsell -k rshell_client", "info") + 
+ui.color("    irshell -u", "info") + 
+ui.color("    irshell --level debug", "info") + 
+ui.color("    irshell -c -kill rshell_client", "info")
+
+
+args = ArgParser.parse(params)
+if args.has("-h") or args.has("--help") then
+	print(helpStr)
+	exit()
+end if
+
+ui.setLogLevel(args.get("--level", "info"))
+
 metaxploit = include_lib("/lib/metaxploit.so")
 if not metaxploit then
 	metaxploit = include_lib(current_path + "/metaxploit.so")
@@ -9,16 +43,8 @@ if not metaxploit then
 	ui.error("Error: Can't find metaxploit library in the /lib path or the current folder")
 	exit()
 end if
-print("Listening for upcoming connections...")
+ui.info("Listening for upcoming connections...")
 
-helpStr = ui.color("Usage: irshell [-c|--clear <will try to clear system.log instead of session>] [-k|--kill (pname|pid|pname_part|pid_part <it will search and kill all entries wich contains this token in show_proc string>)]\n [-u|-upgrade rootpassword]", "info")
-
-args = ArgParser.parse(params)
-
-ui.setLogLevel(args.get("--level", "info"))
-
-if args.has("-h") or args.has("--help") then exit(helpStr)
-	
 shells = []
 while shells.len == 0	
 	key = poll_input
@@ -115,7 +141,7 @@ if spid != null then
 end if
 
 // if spid != null and rootpass != null then
-if args.has("-u") or args.has("--upgrade") then
+if args.has("-u") or args.has("--upload") then
 	title = args.get("-t", args.get("--title", "rshell_client"))
 	do_a_session = false
 	homedir = currentShell.host_computer.File("/home")
