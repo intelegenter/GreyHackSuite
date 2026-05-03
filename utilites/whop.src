@@ -2,7 +2,36 @@
 import_code("../ui.src")
 import_code("../acli.src")
 
-ui.setLogLevel("info")
+helpStr = ui.color("NAME\n", "info") +
+ui.color("    whop — wifi hopper\n\n", "info") +
+ui.color("SYNOPSIS\n", "info") +
+ui.color("    whop [OPTIONS]\n\n", "info") +
+ui.color("DESCRIPTION\n", "info") +
+ui.color("    a tool to periodically hopping wifi\n\n", "info") +
+ui.color("OPTIONS\n", "info") +
+ui.color("    -i, --interval  specify the hop interval in seconds. default value is 60\n", "info") +
+ui.color("    -f, --file      specify file with networks data from " + ui.color(ui.bold("whack"), "accent") + ". default: wifi.txt\n", "info") +
+ui.color("    --level         specify messages log level info(default)|minimal|debug\n", "info") +
+ui.color("    -h, --help      to see this message\n\n", "info") +
+ui.color("EXAMPLES\n", "info") +
+ui.color("    whop -i 500\n", "info") +
+ui.color("    whop -i 500 -f mywifi.txt\n", "info") +
+ui.color("    whop -i 500 --level debug\n\n", "info") +
+ui.color("INPUT_POLLING\n", "info") +
+ui.color("    during the execution you able to perform several actions by hitting keys:\n", "info") +
+ui.color("    q - exit\n", "info") +
+ui.color("    Enter - immediately hop to next wi-fi\n", "info") +
+ui.color("    Space - pause hopping. hit it again to hop to next wi-fi and continue hopping\n", "info") +
+ui.color("    p - shows networks menu, pick one to hop\n", "info") +
+ui.color("    c - clear screen\n", "info") +
+ui.color("    h - show this message\n", "info")
+
+args = ArgParser.parse(params)
+if args.has("-h") or args.has("--help") then
+    print(helpStr)
+    exit()
+end if
+ui.setLogLevel(args.get("--level", "info"))
 
 loadCreds = function(file)
     if not file isa File then return null
@@ -43,20 +72,23 @@ formSelectMenu = function(creds)
     return options
 end function
 
-args = ArgParser.parse(params)
 comp = get_shell.host_computer
-filePath = args.get("-f", current_path + "/wifi.txt")
+
+filePath = args.get("-f", args.get("--file", "wifi.txt"))
+filePath = get_abs_path(filePath)
+ui.info("loading networks data from " + ui.color(filePath, "accent"))
 file = comp.File(filePath)
 if file == null then
-    exit(ui.color("Can't find file " + filePath, "danger"))
+    ui.error("Can't find file " + ui.color(filePath, "accent"))
+    exit()
 end if
 ui.debug("initiating creds loading") 
 creds = loadCreds(file)
 if creds == null or creds.len == 0 then exit(ui.color("no creds found in file " + filePath, "danger"))
 
-interval = args.get("-i", "60").val
+interval = args.get("-i", args.get("--interval", "60")).val
 if interval == 0 then 
-    ui.warn("invalid interval, use default 60s")
+    ui.warn("invalid interval, forsed to use default 60s")
     interval = 60
 end if
 
@@ -73,7 +105,6 @@ while true
         continue
 	else 
 		ui.success("connected to " + currentCred.essid + " " + get_shell.host_computer.public_ip)
-		ui.info("press 'Enter' to hop immediately, 'Space' to start/pause hopping, 'p' to pick specific network")
     end if
 	while secondsElapsed < interval
 		key = poll_input
@@ -95,6 +126,10 @@ while true
             if option.value == null then continue
             currentCredInd = option.value
 			break
+        else if key == "h" then
+            print(helpStr)
+        else if key == "c" then
+            print(" ", true)
 		end if
 		wait(0.25)
         if not isPaused then
