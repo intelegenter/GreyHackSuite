@@ -36,7 +36,7 @@ if ex.targetLib == null then exit()
 
 ui.debug(ex.targetLib.lib_name + " " + ex.targetLib.version)
 
-collector = Collector.init(ex, addr, zone)
+collector = Collector.private.init(ex, addr, zone)
 collector.scanRouter()
 collector.collect()
 

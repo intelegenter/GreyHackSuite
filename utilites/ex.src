@@ -38,6 +38,11 @@ args = ArgParser.parse(params)
 logLevel = args.get("--level", "info")
 ui.setLogLevel(logLevel)
 
+if args.has("-s") or args.has("--shell") then
+	ui.info("opening current machine shell object")
+	exit(Meta.startMenu(get_shell))
+end if
+
 parseCreds = function(credsStr)
 	arr = credsStr.split("@")
 	ui.debug("--remote arguments array: " + arr)
@@ -56,28 +61,25 @@ parseCreds = function(credsStr)
 	return retval
 end function
 
-if args.has("-s") or args.has("--shell") then
-	exit(Meta.startMenu(get_shell))
-end if
 
-remoteMetaxploitStr = args.get("--remote-metaxploit", null)
-if remoteMetaxploitStr != null then
-	creds = parseCreds(remoteMetaxploitStr)
-	ex = ExploitCore.remoteInit(creds.user, creds.pass, creds.ip, creds.port, creds.service)
-	if not ex then
-		ex = ExploitCore.init
-		if not ex then
-			ui.error("can't find metaxploit.so")
-			exit()
-		end if
-	end if
-else
-	ex = ExploitCore.init
-	if not ex then
-		ui.error("can't find metaxploit.so")
-		exit()
-	end if
+// remoteMetaxploitStr = args.get("--remote-metaxploit", null)
+// if remoteMetaxploitStr != null then
+	// creds = parseCreds(remoteMetaxploitStr)
+	// ex = ExploitCore.remoteInit(creds.user, creds.pass, creds.ip, creds.port, creds.service)
+	// if not ex then
+		// ex = ExploitCore.init
+		// if not ex then
+			// ui.error("can't find metaxploit.so")
+			// exit()
+		// end if
+	// end if
+// else
+ex = ExploitCore.init
+if not ex then
+	ui.error("can't find metaxploit.so")
+	exit()
 end if
+// end if
 
 getLocalDump = function()
 	if args.positional.len == 0 then
@@ -109,14 +111,14 @@ end function
 if args.has("--remote-called") then
 	getRemoteDump()
 	if not ex.hasIndex("targetLib") or ex.targetLib == null then 
-		ui.info("can't load remote dump, getting local dump")
+		ui.info("can't load remote dump, exiting remote process")
 		getLocalDump()
 	end if
 else
 	getLocalDump()
 end if
 
-executeRemotely = function(remote_str)
+scanRemotely = function(remote_str)
 	arr = remote_str.split("@")
 	ui.debug("--remote arguments array: " + arr)
 	if arr.len < 3 then
@@ -144,7 +146,7 @@ executeRemotely = function(remote_str)
 	else
 		toolPath = getToolPath("ex", shell.host_computer)
 		if toolPath == null then
-			ui.error("cant find tool ex on remote macnine")
+			ui.error("cant find " + ui.color("ex", "accent") + " on remote macnine")
 			return null
 		end if
 		shell.launch(toolPath, "--remote-called --level " + logLevel)
@@ -177,7 +179,7 @@ justPerform = function(addr, zone, args)
 		else if subopt.value == "collect" then
 			ui.debug("collecting computer")
 			ui.debug(ui.color("creating collector", "danger"))
-			collector = Collector.init(ex, addr, zone)
+			collector = Collector.private.init(ex, addr, zone)
 			ui.debug(ui.color("collector created: ", "danger") + collector)
 			ui.debug(ui.color("; collector .private: ", "danger") + collector.private)
 			if collector == null then 
@@ -203,7 +205,7 @@ end function
 vulns = []
 remote_str = args.get("--remote", null)
 if remote_str != null then
-	remoteVulns = executeRemotely(remote_str)
+	remoteVulns = scanRemotely(remote_str)
 	if remoteVulns != null then vulns = remoteVulns
 end if
 
@@ -400,7 +402,7 @@ while true
 			firsttime = true
 		else if subopt.value == "collect" then
 			ui.debug("collecting computer")
-			collector = Collector.init(ex, opt.value.addr, opt.value.zone)
+			collector = Collector.private.init(ex, opt.value.addr, opt.value.zone)
 			ui.debug(ui.color("collector created: ", "danger") + collector)
 			ui.debug(ui.color("; collector .private: ", "danger") + collector.private)
 			if collector == null then 

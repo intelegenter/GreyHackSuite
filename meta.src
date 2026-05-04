@@ -51,19 +51,11 @@
         if object.hasIndex("classID") and object.classID == "computer" then 
             ui.debug("mocking computer " + object)
             ui.debug("args = " + self.args)
-            if object.hasIndex("classId") and object.classID != "computer" then 
-                ui.debug("not a computer object, cant mock")
-            else
-                Mock.mockComputer(self)
-            end if
+            Mock.mockComputer(self)
         else if object.hasIndex("classID") and object.classID == "file" then 
             ui.debug("mocking file " + object)
             ui.debug("args = " + self.args)
-            if object.hasIndex("classId") and object.classID != "file" then 
-                ui.debug("not a file object, cant mock")
-            else
-                Mock.mockFile(self)
-            end if
+             Mock.mockFile(self)
         end if
         self.vars = {}
         return self

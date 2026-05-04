@@ -204,13 +204,13 @@ Collector.toFile = function(self, filePath)
     return path
 end function
 
-Collector.init = function(ex, addr, zone)
+Collector["private"]["init"] = function(ex, addr, zone)
     if ex.targetLib == null then return null
     if ex.lib == null then return null
-    self = new Collector
-    self.ex = ex
-    self.addr = addr
-    self.zone = zone
-    self["private"] = Collector["private"]
-    return self
+    instance = new Collector
+    instance.ex = ex
+    instance.addr = addr
+    instance.zone = zone
+    instance["private"] = Collector["private"]
+    return instance
 end function
