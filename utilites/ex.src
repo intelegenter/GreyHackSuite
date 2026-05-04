@@ -6,6 +6,7 @@ import_code("../meta.src")
 import_code("../collector.src")
 import_code("../netutils.src")
 import_code("../listops.src")
+import_code("../commands.src")
 
 paths = ["/bin", "/hack"]
 
@@ -39,6 +40,14 @@ args = ArgParser.parse(params)
 
 logLevel = args.get("--level", "info")
 ui.setLogLevel(logLevel)
+
+//if pure call
+if args.flags.len == 0 and (args.options.len == 0 or (args.options.len == 1 and args.get("--level") != null)) then
+	ui.success("commands menu")
+	cmd = Commands.init(null, null, null, logLevel)
+	cmd.menu()
+	exit()
+end if
 
 shellcreds = args.get("-s", args.get("--shell"))
 if shellcreds == null and (args.has("-s") or args.has("--shell")) then

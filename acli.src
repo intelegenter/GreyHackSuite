@@ -10,6 +10,7 @@ ArgParser.parse = function(args)
     self.options = {}
     self.flags = []
     self.positional = []
+	self.original = args
 	if args.len == 0 then
 		return self
 	end if

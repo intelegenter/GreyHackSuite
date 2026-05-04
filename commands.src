@@ -1,0 +1,326 @@
+Commands = {}
+
+Commands.init = function(shell = null, user = null, currentPath = null, loglevel = "info")
+    self = new Commands
+    self.shell = shell
+    if self.shell == null then self.shell = get_shell()
+    ui.debug(self.shell)
+    self.user = user
+    if self.user == null then self.user = active_user
+    ui.debug(self.user)
+    self.path = currentPath
+    if self.path == null then self.path = current_path
+    ui.debug(self.path)
+    self.comp = self.shell.host_computer()
+    self.loglevel = loglevel
+    self.finish = false
+    prefixpath = self.path.replace("/home/" + self.user, "~")
+    self.cmdprefix = ui.color(self.user + ":" + prefixpath + "> ", "#ff00ff")
+    self._PATH = ["/bin", "/hack", "/usr/bin"]
+    return self
+end function
+
+Commands.setNewPath = function(cdpath)
+    self.path = cdpath
+    prefixpath = self.path.replace("/home/" + self.user, "~")
+    self.cmdprefix = ui.color(self.user + ":" + prefixpath + "> ", "#ff00ff")
+end function
+
+Commands.setNewShell = function(shell, user)
+    self.shell = shell
+    self.comp = self.shell.host_computer
+    self.user = user
+    prefixpath = self.path.replace("/home/" + self.user, "~")
+    self.cmdprefix = ui.color(self.user + ":" + prefixpath + "> ", "#ff00ff")
+end function
+
+Commands.validateFile = function(file, errmsg)
+    if file isa string then
+        ui.error(file)
+    end if
+    if not file or file isa string then
+        ui.error(errmsg)
+        return false
+    end if
+    return true
+end function
+
+Commands.parseCommandLine = function(line)
+    if line == null then
+        ui.error("invalid input object")
+        return
+    end if
+    if line == "" then
+        return
+    end if
+    linelist = line.split(" ")
+    cmdname = linelist[0]
+    args = ArgParser.parse(linelist[1:])
+    if cmdname == "rm" then
+        if args.positional.len == 0 then
+            ui.error("invalid arguments")
+            return
+        end if
+        self.rm(args.positional[0])
+        return
+    else if cmdname == "cd" then
+        if args.positional.len == 0 then
+            self.cd("")
+        else
+            self.cd(args.positional[0])
+        end if
+        return
+    else if cmdname == "ls" then
+        self.ls(args)
+        return
+    else if cmdname == "sudo" then
+        self.sudo(args)
+        return
+    else if cmdname == "exit" then
+        self.finish = true
+        ui.success("bye bye, master!")
+        return
+    end if
+end function
+
+Commands.menu = function()
+    prevLogLevel = ui.logLevel
+    ui.setLogLevel(self.loglevel)
+    while not self.finish
+        input = user_input(self.cmdprefix, 0, 0, 1)
+        self.parseCommandLine(input)
+    end while
+    ui.setLogLevel(prevLogLevel)
+end function
+
+Commands.getAbsPath = function(relativePath)
+    ui.debug("getting abs path for " + relativePath)
+    if relativePath == null or not relativePath isa string or relativePath.len == 0 then 
+        return null
+    end if
+    ui.debug("replacing ~ in " + relativePath)
+    relativePath = relativePath.replace("~", "/home/" + self.user)
+    ui.debug(relativePath)
+    ui.debug("searching /")
+    if relativePath[0] != "/" then
+        ui.debug("/ not found, adding path")
+        relativePath = self.path + "/" + relativePath
+    else
+        ui.debug("/ found, leave it as it is")
+    end if
+    ui.debug(relativePath)
+    
+
+    ui.debug("resolving .. in " + relativePath)
+    l = relativePath.split("/")
+    ui.debug("split by / : " + l)
+    removecount = 0
+    for i in range(l.len - 1, 0)
+        ui.debug("l[i] = " + l[i])
+        if l[i] == ".." then
+            ui.debug("found .., remove, counter++")
+            if i == 0 then 
+                ui.error("wrong path")
+                return null
+            end if
+            l.remove(i)
+            removecount = removecount + 1
+            ui.debug(l + "; counter = " + removecount)
+            continue
+        else
+            ui.debug(".. not found")
+            if removecount > 0 then
+                ui.debug("counter = " + removecount + "; removing " + l[i])
+                l.remove(i)
+                ui.debug("removed, new l = " + l)
+                removecount = removecount - 1
+            end if
+        end if
+    end for
+    ui.debug("compile path from " + l)
+    if l.len == 1 and l[0] == "" then 
+        relativePath = "/"
+    else
+        relativePath = l.join("/")
+    end if
+    ui.debug("compiled path = " + relativePath)
+    return relativePath
+end function
+
+Commands.filenameMatchesPattern = function(fileName, pattern)
+    regPattern = pattern.replace("\.", "\\.").replace("\*", ".*").replace("\?", ".")
+    regPattern = "^" + regPattern + "$"
+    ui.debug("check match for " + fileName + " in " + regPattern)
+    result = fileName.is_match(regPattern)
+    if result then ui.debug("match")
+    if not result then ui.debug("mismatch")
+    return result
+end function
+
+Commands.rm = function(rmpath)
+    if rmpath == null or rmpath == "" then 
+        ui.error("rm usage: rm <path>")
+        return
+    end if
+    rmpath = self.getAbsPath(rmpath)
+    ui.debug("use rm with path " + rmpath)
+    if rmpath == null or rmpath == "" then
+        ui.error("path is empty")
+        return
+    end if
+    rmpathlist = rmpath.split("/")
+    if rmpathlist.len == 0 then 
+        ui.error("path is empty")
+        return
+    end if
+    pathesToRemove = []
+    ui.debug("check part " + rmpathlist[-1] + " for * or ?")
+    if rmpathlist[-1].indexOf("*") != null or rmpathlist[-1].indexOf("?") != null then
+        ui.debug("* or ? was found")
+        ui.debug("pathlist = " + rmpathlist)
+        folderpath = rmpathlist[0:-1].join("/")
+        ui.debug("folderpath = " + folderpath)
+        folder = self.comp.File(folderpath)
+        error = not self.validateFile(folder, "can't open folder " + folderpath)
+        if error then return
+        pattern = rmpathlist[-1]
+        files = folder.get_files
+        for file in files
+            if self.filenameMatchesPattern(file.name, pattern) then
+                pathesToRemove.push(file.path)
+            end if
+        end for
+    else
+        pathesToRemove.push[rmpath]
+    end if
+    ui.debug("files to remove: " + pathesToRemove)
+    for p in pathesToRemove
+        file = self.comp.File(p)
+        error = not self.validateFile(file, "can't open file " + p)
+        if error then continue
+        ui.debug("perform removing " + file.path)
+    end for
+end function
+
+Commands.cd = function(cdpath)
+    if cdpath == "" then
+        cdpath = "~"
+    end if
+    cdpath = self.getAbsPath(cdpath)
+    if cdpath == null or cdpath == "" then
+        ui.error("path is empty")
+        return
+    end if
+    result = cd(cdpath)
+    if result.len > 0 then
+        ui.error(result)
+        return
+    end if
+    self.setNewPath(current_path())
+end function
+
+Commands.fileInfo = function(file)
+    error = not self.validateFile(file, "can't open file")
+    if error then return "can't acces"
+    permission = file.permissions
+    owner = file.owner
+    size = file.size
+    group = file.group
+    data = [permission, owner, group, size, file.name]
+    if file.is_symlink then 
+        data[-1] = data[-1] + "-->" + file.path(true)
+    end if
+    if file.is_folder then
+        for i in range(0, data.len-1)
+            data[i] = ui.color(data[i], "accent")
+        end for
+    end if
+    return data
+end function
+
+Commands.ls = function(args)
+    showInfo = args.has("-la")
+    currentFolder = self.comp.File(self.path)
+    files = currentFolder.get_files
+    folders = currentFolder.get_folders
+    tdata = []
+    for folder in folders
+        data = [ui.color(folder.name, "accent")]
+        if showInfo then 
+            data = self.fileInfo(folder)
+        end if
+        tdata.push(data)
+    end for
+    for file in files
+        data = [file.name]
+        if showInfo then 
+            data = self.fileInfo(file)
+        end if
+        tdata.push(data)
+    end for
+    headers = ["TITLE"]
+    if showInfo then headers = ["PERM", "OWN", "GRP", "SIZE", "TITLE"]
+    table = ui.table(headers, tdata)
+    print(table)
+end function
+
+Commands.getToolPath = function(name)
+	ui.debug("getting tool path in " + self._PATH) 
+	if name == null or name == "" or self.comp == null then 
+        ui.debug("invalid name: '" + name + "'")
+        return null
+    end if
+	for path in self._PATH
+		folder = self.comp.File(path)
+		ui.debug("searching in " + path) 
+		files = folder.get_files
+		nameGetter = function(file)
+			return file.name
+		end function;
+		names = Listops.transform(files, @nameGetter)
+		ui.debug("it contains: " + names)
+		if names.indexOf(name) != null then 
+			ui.debug("tool found: " + path + "/" + name)
+			return path + "/" + name
+		else
+			ui.debug("tool " + name + " wasn't found in " + path)
+		end if
+	end for
+	ui.debug("tool " + name + "wasn't found at all")
+	return null
+end function
+
+Commands.sudo = function(args)
+    ui.debug("sudo with " + args) 
+    switchSuper = args.has("-s")
+    switchUser = args.get("-u", null)
+    if switchSuper or switchUser then
+        pass = args.get("-p", args.get("--pass", null))
+        if pass == null then pass = user_input("Password: ", true)
+        user = "root"
+        if not switchSuper then user = switchUser
+        shell = get_shell(user, pass)
+        if not shell then 
+            ui.error("Failed to switch user")
+            return
+        end if
+        self.setNewShell(shell, user)
+    else
+        pass = args.get("-p", args.get("--pass", null))
+        if pass == null then pass = user_input("Password: ", true)
+        rootshell = get_shell("root", pass)
+        if not rootshell then
+            ui.error("Failed to get root rights")
+            return
+        end if
+        newArgs = args.get("--args", null)
+        argsLine = ""
+        if newArgs != null then
+            argsLine = newArgs.split("@").join(" ")
+        end if
+        ui.debug("tool: '" + args.positional[0] + "'")
+        toolpath = self.getToolPath(args.positional[0])
+        ui.debug("tool path: " + toolpath + "; argsLine: '" + argsLine + "'")
+        rootshell.launch(toolpath, argsLine)
+    end if
+end function
