@@ -9,6 +9,8 @@ import_code("../listops.src")
 
 paths = ["/bin", "/hack"]
 
+ui.success("Exploiter: Hello master!")
+
 getToolPath = function(name, computer)
 	ui.debug("getting tool path in " + paths) 
 	if name == null or name == "" or computer == null then return null
@@ -38,9 +40,50 @@ args = ArgParser.parse(params)
 logLevel = args.get("--level", "info")
 ui.setLogLevel(logLevel)
 
-if args.has("-s") or args.has("--shell") then
-	ui.info("opening current machine shell object")
+shellcreds = args.get("-s", args.get("--shell"))
+if shellcreds == null and (args.has("-s") or args.has("--shell")) then
+	ui.info("shell menu for " + ui.color(active_user, "accent"))
 	exit(Meta.startMenu(get_shell))
+else if shellcreds isa string then
+	credslist = shellcreds.split("@")
+	if credslist.len <= 1 or credslist[0].len == 0 or credslist[1].len == 0 then
+		ui.error("wrong credentials, use: 'user@pass'")
+		exit()
+	end if
+	user = credslist[0]
+	pass = credslist[1]
+	shell = get_shell(user, pass)
+	if shell isa string then
+		ui.error(shell)
+	end if
+	if shell == null or shell isa string then
+		ui.error("can't open shell")
+		exit()
+	end if
+	ui.info("shell menu for " + ui.color(user, "accent"))
+	exit(Meta.startMenu(shell))
+end if
+
+if args.has("-wl") or args.has("--wipelogs") then
+	comp = get_shell.host_computer
+	logfile = comp.File("/")
+	if not logfile.has_permission("w") then
+		ui.error("not enough permissions")
+		exit()
+	end if
+	comp.touch(get_abs_path("~"), "blank.txt")
+	blank = comp.File(get_abs_path("~") + "/" + "blank.txt")
+	if blank isa string then
+		ui.error(blank)
+	end if
+	if not blank or blank isa string then
+		ui.error("Can't create " + get_abs_path("~") + "/" + "blank.txt")
+		exit()
+	end if
+	blank.set_content("there was i and my friend: i")
+	blank.move("/var", "system.log")
+	ui.success("log file successfully wiped")
+	exit()
 end if
 
 parseCreds = function(credsStr)
