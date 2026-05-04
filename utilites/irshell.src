@@ -135,6 +135,7 @@ killProc = function(processToken)
 end function
 
 spid = args.get("-k", args.get("--kill", null))
+ui.debug("spid = " + spid)
 if spid != null then
 	do_a_session = false
 	killProc(spid)

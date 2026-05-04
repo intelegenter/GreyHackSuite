@@ -89,11 +89,14 @@ getLocalDump = function()
 	if isIp then
 		targetIp = args.positional[0]
 		if args.positional.len > 1 then
+			ui.debug("loading remote dump with port")
 			ex.loadRemoteDump(targetIp, args.positional[1].val)
 		else
+			ui.debug("loading remote dump with out port")
 			ex.loadRemoteDump(targetIp)
 		end if
 	else
+		ui.debug("loading local library dump")
 		ex.loadLibDump(args.positional[0])
 	end if
 end function
