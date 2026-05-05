@@ -1,0 +1,220 @@
+Euristics = {}
+Euristics.hasRootRights = function(rootPathFile)
+    rootDir = Fileops.getFileFromFile(rootPathFile, "/root")
+    if not rootDir then
+        ui.debug("root folder not found")
+        return null
+    end if
+    if rootDir.has_permission("w") then
+        return "root"
+    end if
+    return null
+end function
+
+Euristics.hasUserRights = function(rootPathFile)
+    homeDir = Fileops.getFileFromFile(rootPathFile, "/home")
+    if not homeDir then
+        ui.debug("home folder not found")
+        return null
+    end if
+
+    folders = homeDir.get_folders()
+    for folder in folders
+        if folder.name == "guest" then continue
+        if folder.has_permission("w") then return folder.name
+    end for
+    return null
+end function
+
+Euristics.hasGuestRights = function(rootPathFile)
+    guestDir = Fileops.getFileFromFile(rootPathFile, "/home/guest")
+    if not guestDir then
+        ui.debug("guest folder not found")
+        return null
+    end if
+    
+    if guestDir.has_permission("w") then
+        return "guest"
+    end if
+    return null
+end function
+
+Euristics.fullWSearch = function(file, write_access_folders, write_access_files)
+    if file.has_permission("w") then 
+        if file.is_folder then 
+            write_access_folders.push(file)
+        else 
+            write_access_files.push(file)
+        end if
+    end if
+    children = Fileops.fileChildren(file)
+    for c in children
+        Euristics.fullWSearch(c, write_access_folders, write_access_files)
+    end for
+end function
+
+Euristics.ownerOnlyWRight = function(file)
+    regEx = "^.{5}-.{2}-.{1}$"
+    return file.permissions().is_match(regEx)
+end function
+
+Euristics.getUserByDefaultFolders = function(file)
+    if not Fileops.isAFile(file) then
+        return null
+    end if
+    rootFile = Fileops.getFileFromFile(file, "/")
+    user = Euristics.hasRootRights(rootFile)
+    if not user then
+        user = Euristics.hasUserRights(rootFile)
+    end if
+    if not user then
+        user = Euristics.hasGuestRights(rootFile)
+    end if
+    return user
+end function
+
+Euristics.getUserByOnwerEuristics = function(fileProbe)
+    if not Fileops.isAFile(fileProbe) then
+        ui.debug(fileProbe + " is not a " + ui.color("file", "accent"))
+        return null
+    end if
+    file = fileProbe
+    while file.path != "/"
+        file = file.parent()
+    end while
+    rootFile = Fileops.getRootFile(file)
+    folders = []
+    files = []
+    Euristics.fullWSearch(rootFile, folders, files)
+    children = folders + files
+    rights = {}
+    for c in children
+        if Euristics.ownerOnlyWRight(c) and c.has_permission("w") then
+            rights[c.owner] = ""
+            rights["root"] = ""
+        end if
+    end for
+    //easy case
+    if rights.indexes.len > 0 then
+        if rights.indexes == 1 then return rights.indexes[0]
+        rights.remove("root")
+        if rights.indexes.len == 1 then return rights.indexes[0]
+        rights.remove("guest")
+        if rights.indexes.len == 1 then return rights.indexes[0]
+        //more than one owners and we have w right, maybe root, maybe noot
+        return "root"
+    end if
+    //checking access rights to /root /home/user /home/guest may be not robust
+    //so just return found list
+    return rights.indexes
+end function
+
+Euristics.getUserByFileCreating = function(comp)    
+    writableFolders = []
+    writableFiles = []
+    blankTitle = "blank_" + current_date + ".txt"
+    Euristics.fullWSearch(comp.File("/"), writableFolders, writableFiles)
+    if writableFolders.len == 0 then
+        return null
+    end if
+    anyFolder = writableFolders[0]
+    if writableFiles.len == 0 then
+        if not ui.confirm("to know exact user i should create a file but will not be able to remove it. continue?", "n") then
+            return null
+        end if
+        ui.warning("creating file " + blankTitle + " in " + anyFolder.path + " without post-removing")
+    end if
+    
+    result = comp.touch(anyFolder.path, blankTitle)
+    if result isa string then
+        ui.error(anyFolder.path + ": " + result)
+    end if 
+    if not result or result isa string then
+        ui.error("can't create blank.txt in " + anyFolder.path)
+        return null
+    end if
+    file = comp.File(anyFolder.path + "/" + blankTitle)
+    if not file then
+        ui.error("can't open file " + blankTitle)
+        return null
+    end if
+    user = file.owner
+    if writableFiles.len > 0 then
+        donor = writableFiles[0]
+        donorfolder = donor.parent.path
+        donorname = donor.name
+        donor.move(file.parent.path, file.name)
+        donor.move(donorfolder, donorname)
+    end if
+    return user
+end function
+
+//main combined function to use all euristics from upper with confidence level:
+Euristics.userProbe = function(object)
+    if object == null then 
+        return null
+    else if object isa string then
+        return null
+    else if not object isa map then
+        return null
+    end if
+    fileProbe = null
+    compProbe = null
+    if typeof(object) == "shell" then
+        compProbe = object.host_computer
+        fileProbe = compProbe.File("/")
+    else if typeof(object) == "computer" then
+        compProbe = object
+        fileProbe = compProbe.File("/")
+    else if  typeof(object) == "file" then
+        fileProbe = object
+    end if
+    ownerEuristics = Euristics.getUserByOnwerEuristics(fileProbe)
+    directoryEuristics = Euristics.getUserByDefaultFolders(fileProbe)
+    confidenceLevel = 0.0
+    user = null
+    if ownerEuristics != null then
+        if ownerEuristics isa list then
+            if ownerEuristics.len == 1 then
+                confidenceLevel = confidenceLevel + 1.0
+                user = ownerEuristics[0]
+            else if ownerEuristics.len > 1 then
+                confidenceLevel = confidenceLevel + 0.5
+            else if ownerEuristics.len == 0 then
+                confidenceLevel = 0.0
+            end if
+        else
+            confidenceLevel = confidenceLevel + 1.0
+            user = ownerEuristics
+        end if
+    end if
+
+    if confidenceLevel >= 1.0 then
+        return user
+    end if
+
+    if directoryEuristics != null then
+        if user != null and user isa string then
+            if directoryEuristics == user then
+                confidenceLevel = 1.0
+            end if
+        else if ownerEuristics isa list and ownerEuristics.len > 1 then
+            for o in ownerEuristics
+                if o == directoryEuristics then
+                    user = o
+                    confidenceLevel = 1.0
+                    break
+                end if
+            end for
+        end if
+    end if
+    if confidenceLevel >= 1.0 then
+        return user
+    end if            
+
+    //heavy artillery
+    if compProbe then
+        user = Euristics.getUserByFileCreating(compProbe)
+    end if
+    return user
+end function

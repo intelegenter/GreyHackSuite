@@ -48,14 +48,20 @@
             self.args[key] = args
             self.methods[key] = @member
         end for
-        if object.hasIndex("classID") and object.classID == "computer" then 
-            ui.debug("mocking computer " + object)
-            ui.debug("args = " + self.args)
-            Mock.mockComputer(self)
-        else if object.hasIndex("classID") and object.classID == "file" then 
-            ui.debug("mocking file " + object)
-            ui.debug("args = " + self.args)
-             Mock.mockFile(self)
+        if object.hasIndex("classID") then
+            if object.classID == "computer" then 
+                ui.debug("mocking computer " + object)
+                ui.debug("args = " + self.args)
+                Mock.mockComputer(self)
+            else if  object.classID == "file" then 
+                ui.debug("mocking file " + object)
+                ui.debug("args = " + self.args)
+                Mock.mockFile(self)
+            else if object.classID == "shell" then
+                ui.debug("mocking shell " + object)
+                ui.debug("args = " + self.args)
+                Mock.mockShell(self)
+            end if
         end if
         self.vars = {}
         return self

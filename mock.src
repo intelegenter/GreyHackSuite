@@ -75,3 +75,12 @@ Mock.mockFile = function(meta)
         return Meta.checkFile(file)
     end function
 end function
+
+Mock.mockShell = function(meta)
+    ui.debug("shell mocking function, args = " + meta.args)
+    meta.args["exshell"] = ["self"]
+    meta.methods["exshell"] = function(self)
+        shellmenu = Commands.init(self, null, null, ui.logLevel)
+        shellmenu.menu()
+    end function
+end function

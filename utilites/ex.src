@@ -6,6 +6,8 @@ import_code("../meta.src")
 import_code("../collector.src")
 import_code("../netutils.src")
 import_code("../listops.src")
+import_code("../fileops.src")
+import_code("../euristics.src")
 import_code("../commands.src")
 
 paths = ["/bin", "/hack"]
@@ -38,11 +40,14 @@ end function
 ex = null
 args = ArgParser.parse(params)
 
-logLevel = args.get("--level", "info")
+logLevel = "info"
+if args.has("--debug") then
+	logLevel = "debug"
+end if
 ui.setLogLevel(logLevel)
 
 //if pure call
-if args.flags.len == 0 and (args.options.len == 0 or (args.options.len == 1 and args.get("--level") != null)) then
+if args.options.len == 0  and args.positional.len == 0 and (args.flags.len == 0 or args.flags.len == 1 and args.has("--debug")) then
 	ui.success("commands menu")
 	cmd = Commands.init(null, null, null, logLevel)
 	cmd.menu()
@@ -376,10 +381,10 @@ if vulns.len == 0 then
 			vulns.push(vuln)
 		end for
 	end for
+	//vuln = {addr, zone, status, num, cond}
 	ui.debug("vulns: " + vulns)
 	headers = ["#", "ADDR", "ZONE", "STATUS", "CONDITIONS"]
 	keys = ["num", "addr", "zone", "status"]
-	//data = []
 
 	if vulns == null or vulns == [] then
 		ui.error("error: can't find any vulnurability, try to update metaxploit.so")
@@ -394,22 +399,77 @@ if args.has("--remote-called") then
 	exit()
 end if
 
-nextchoice = "1"
-firsttime = true
-while true
+probing = args.has("--probe")
+
+if probing then
+	ui.debug("probing " + vulns)
+	ex.probe(vulns)
+	ui.debug("probed " + vulns)
+	for i in vulns.indexes.reverse
+		if not vulns[i].hasIndex("result") then
+			ui.debug(ui.color(vulns[i], "accent") + " has no 'result', remove")
+			vulns.remove(i)
+		end if
+	end for
+end if
+
+makeVulnsOpts = function(vulns)
 	options = []
-	for m in vulns
+	for v in vulns
 		opt = {}
-		text = [m.addr, m.zone].join(" ")
-	    if m.hasIndex("cond") then 
-	        for c in m.cond
+		text = [v.addr, v.zone].join(" ")
+	    if v.hasIndex("cond") then 
+	        for c in v.cond
 	            text = text + char(10) + c
 	        end for
 	    end if
 		opt.text = text
-		opt.value = m
+		opt.value = v
 		options.push(opt)
 	end for
+	return options
+end function
+
+firsttime = true
+makeProbeOpts = function(vulns)
+	options = []
+	for v in vulns
+		opt = {}
+		if not v.hasIndex("result") then
+			if firsttime then
+				//first time and when i want to show menu again
+				ui.error(ui.color(v.addr + ui.color(":", "primary") + v.zone, "accent") + " attack failed") 
+			end if
+			continue
+		end if
+		text = typeof(v.result)
+		if v.hasIndex("user") then
+			text = text + " : " + v.user
+		else
+			text = text + " : " + Commands._nobody
+		end if
+		if v.hasIndex("details") then
+			text = text + " : " + v.details
+		end if
+		opt.text = text
+		opt.value = v
+		options.push(opt)
+	end for
+	return options
+end function
+
+nextchoice = "1"
+while true
+	options = []
+	ui.debug("probing?")
+	if probing then
+		ui.debug("probing!")
+		options = makeProbeOpts(vulns)
+	else
+		ui.debug("Not probing!")
+		options = makeVulnsOpts(vulns)
+	end if
+	ui.debug("end if probing")
 	if log_enabled then
 		if log_path == null then log_path = ex.targetLib.lib_name + "_" + ex.targetLib.version + ".scan"
 		str = ""

@@ -1,0 +1,130 @@
+Fileops = {}
+Fileops.isAFile = function(object)
+    if object == null then 
+        return false
+    else if object isa string then
+        return false
+    else if not object isa map then
+        return false
+    else if typeof(object) != "file" then
+        return false
+    end if
+    return true
+end function
+
+Fileops.getRootFile = function(anyFile)
+    if not Fileops.isAFile(anyFile) then
+        return null
+    end if
+    file = anyFile
+    while file.name != "/"
+        file = file.parent()
+    end while
+    return file
+end function
+
+Fileops.getAbsPath = function(relativePath, currentPath, user = null)
+    ui.debug("getting abs path for " + relativePath)
+    if relativePath == null or not relativePath isa string or relativePath.len == 0 then 
+        return null
+    end if
+    if user != null then
+        ui.debug("replacing ~ in " + relativePath)
+        relativePath = relativePath.replace("~", "/home/" + user)
+    end if
+    ui.debug(relativePath)
+    ui.debug("searching /")
+    if relativePath[0] != "/" then
+        if currentPath != "/" then
+            ui.debug("/ not found, adding path")
+            relativePath = currentPath + "/" + relativePath
+        else
+            ui.debug("/ not found, adding path")
+            relativePath = "/" + relativePath
+        end if
+    else
+        ui.debug("/ found, leave it as it is")
+    end if
+    ui.debug(relativePath)
+    
+    ui.debug("resolving .. in " + relativePath)
+    l = relativePath.split("/")
+    ui.debug("split by / : " + l)
+    removecount = 0
+    for i in range(l.len - 1, 0)
+        ui.debug("l[i] = " + l[i])
+        if l[i] == ".." then
+            ui.debug("found .., remove, counter++")
+            if i == 0 then 
+                ui.error("wrong path")
+                return null
+            end if
+            l.remove(i)
+            removecount = removecount + 1
+            ui.debug(l + "; counter = " + removecount)
+            continue
+        else
+            ui.debug(".. not found")
+            if removecount > 0 then
+                ui.debug("counter = " + removecount + "; removing " + l[i])
+                l.remove(i)
+                ui.debug("removed, new l = " + l)
+                removecount = removecount - 1
+            end if
+        end if
+    end for
+    ui.debug("compile path from " + l)
+    if l.len == 1 and l[0] == "" then 
+        relativePath = "/"
+    else
+        relativePath = l.join("/")
+    end if
+    ui.debug("compiled path = " + relativePath)
+    return relativePath
+end function
+
+Fileops.fileChildren = function(file)
+    children = file.get_folders
+    children = children + file.get_files
+    return children
+end function
+
+Fileops.pathTrhoughToFile = function(rootFile, absPath)
+    file = rootFile
+    pathList = absPath.split("/")
+    for p in pathList
+        children = Fileops.fileChildren(file)
+        for c in children
+            if c.name == p then
+                file = c
+                break
+            end if
+        end for
+        return null
+    end for
+    return file
+end function
+
+
+Fileops.getFileFromFile = function(origFile, desiredPath)
+    if not Fileops.isAFile(origFile) then
+        return null
+    end if
+    if desiredPath == null or desiredPath == "" then
+        return origFile
+    end if
+    absPath = Fileops.getAbsPath(desiredPath, origFile.path)
+    if absPath == null then
+        ui.debug("wrong path " + desiredPath)
+        return null
+    end if
+    rootFile = Fileops.getRootFile(origFile)
+    if not rootFile then
+        ui.error("can't open root file from " + origFile.path)
+        return null
+    end if
+
+    targetFile = Fileops.pathTrhoughToFile(rootFile, absPath)
+    //can be null
+    return targetFile
+end function
